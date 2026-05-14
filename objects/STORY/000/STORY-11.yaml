@@ -1,0 +1,16 @@
+id: 019e242d-1482-7941-92fb-f9dc327219b5
+spec_id: STORY-11
+agreed_id: STORY-11
+title: Per-user API-key isolation / billing attribution
+description: |-
+  ## Acceptance
+  - Either: each user supplies their own ANTHROPIC_API_KEY (stored encrypted server-side), OR
+  - All users share a server-wide key but token usage is attributed per user.
+  - A user's token spend is queryable.
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:54.690198320Z
+modified_at: 2026-05-14T01:49:54.690198320Z
+req_type: Story
