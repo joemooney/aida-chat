@@ -1,0 +1,47 @@
+id: 019e2432-7aa7-7961-b6e1-48a5e4f66a52
+spec_id: STORY-15
+agreed_id: STORY-15
+title: Optional claude CLI backend (draws from Claude Code subscription)
+description: |-
+  ## Goal
+  Add a second agent backend that shells out to the local `claude` CLI
+  with `-p --output-format stream-json`, as an alternative to the
+  direct Anthropic-API loop. Lets aida-chat run off a Claude Code
+  subscription when API credits aren't available.
+
+  ## Design
+  - New trait-free dispatch in `src/server/agent.rs`: matches on
+    `cfg.backend` and calls into `backends/anthropic.rs` or
+    `backends/claude_cli.rs`. Both backends speak the same
+    `AgentEvent` (TextDelta / ToolCall / Done / Error) so the SSE
+    layer doesn't change.
+  - Backend selection via `AIDA_CHAT_BACKEND=anthropic|claude-cli`.
+    Auto-default: if `claude` is on PATH, prefer claude-cli; else
+    require `ANTHROPIC_API_KEY` and use anthropic.
+  - Conversation continuity: pass `--session-id <uuid>` on the first
+    turn, `--resume <uuid>` on subsequent turns. Claude Code stores
+    its own conversation history under `~/.claude/projects/...`; our
+    `SessionStore.transcript` stays the source of truth for the UI.
+  - Scope: default Claude Code scope, `cwd = repo_root`. No
+    `--dangerously-skip-permissions`, no `--allowedTools` restriction.
+  - UI: small badge in the chat header showing which backend is
+    active (`anthropic-api` / `claude-cli`).
+
+  ## Acceptance
+  - With `AIDA_CHAT_BACKEND=claude-cli` set, the server starts even
+    without `ANTHROPIC_API_KEY`.
+  - A user message produces a streamed reply driven by the local
+    `claude` process.
+  - Restarting the server and reopening the page replays the previous
+    turns from `SessionStore.transcript` (Claude Code's own history
+    is lost on session-store eviction, but the visible transcript
+    survives the in-memory TTL).
+  - An error from `claude` (non-zero exit, stderr) surfaces to the
+    browser as `event: err` with a non-empty message.
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:55:48.519018503Z
+modified_at: 2026-05-14T01:55:48.519018503Z
+req_type: Story
