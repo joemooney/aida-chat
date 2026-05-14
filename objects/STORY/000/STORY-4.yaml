@@ -22,3 +22,7 @@ feature: Uncategorized
 created_at: 2026-05-14T01:20:05.605451881Z
 modified_at: 2026-05-14T01:20:05.605451881Z
 req_type: Story
+relationships:
+- rel_type: Child
+  target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
+  created_at: 2026-05-14T01:20:06.117494734Z
