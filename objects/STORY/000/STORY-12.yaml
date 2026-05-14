@@ -1,0 +1,17 @@
+id: 019e242d-1e5a-7622-aa8e-beda8aebb00a
+spec_id: STORY-12
+agreed_id: STORY-12
+title: Per-user rate limits + tool-iteration caps
+description: |-
+  ## Acceptance
+  - Per-session cap on tool-loop iterations (already there in v0; expose via config).
+  - Per-user cap on concurrent sessions.
+  - Per-user cap on Anthropic spend per hour / per day.
+  - Exceeding any cap returns a 429 with a clear `event: err` payload, not a hang.
+status: Draft
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:57.210624571Z
+modified_at: 2026-05-14T01:49:57.210624571Z
+req_type: Story
