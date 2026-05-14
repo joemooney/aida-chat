@@ -1,0 +1,20 @@
+id: 019e2411-ada9-71b1-b537-16a0da90f143
+spec_id: STORY-3
+agreed_id: STORY-3
+title: Streaming Anthropic agent loop in Rust
+description: |-
+  Implement a small streaming agent loop against the Anthropic Messages API (`claude-sonnet-4-6` default, configurable). Uses reqwest with `stream=true`. Parses SSE events from Anthropic, accumulates tool_use blocks, dispatches to scoped tools, appends tool_result, and re-enters the API. Emits an internal event stream (text delta, tool_call, tool_result, done, error) that the HTTP layer can forward to the browser as SSE.
+
+  ## Acceptance
+  - Multi-turn tool use works: the model can call a tool, see the result, call another tool, then produce a final answer.
+  - Streaming: text deltas are forwarded to the caller as they arrive, not buffered.
+  - `ANTHROPIC_API_KEY` is required at startup; missing key produces a clear error, not a runtime panic on first chat.
+  - A bounded `max_tool_iterations` (e.g., 10) prevents runaway loops.
+  - Loop exits cleanly when the model returns `stop_reason=end_turn` with no pending tool_use.
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:19:58.889904404Z
+modified_at: 2026-05-14T01:19:58.889904404Z
+req_type: Story
