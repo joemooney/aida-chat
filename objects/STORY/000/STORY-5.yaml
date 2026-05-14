@@ -11,12 +11,12 @@ description: |-
   - `GET /api/sessions/:id/history` returns the message list (for page reload).
   - Unknown session id returns 404 (not 500).
   - Trait shape lets a future Postgres-backed implementation drop in without changing the agent or HTTP layer.
-status: Approved
+status: InProgress
 priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:20:09.887011301Z
-modified_at: 2026-05-14T01:20:09.887011301Z
+modified_at: 2026-05-14T01:42:55.715098642Z
 req_type: Story
 relationships:
 - rel_type: Child
