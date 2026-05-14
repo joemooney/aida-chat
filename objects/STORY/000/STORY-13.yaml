@@ -1,0 +1,15 @@
+id: 019e242d-28be-7ae0-9718-eb506e5a9610
+spec_id: STORY-13
+agreed_id: STORY-13
+title: Conversation export (markdown)
+description: |-
+  ## Acceptance
+  - A button in the chat header downloads the current session as a `.md` file.
+  - The export includes user turns, assistant turns, and a collapsed "tools used" line per assistant turn.
+status: Draft
+priority: Low
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:59.870264643Z
+modified_at: 2026-05-14T01:49:59.870264643Z
+req_type: Story
