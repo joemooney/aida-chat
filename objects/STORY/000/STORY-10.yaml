@@ -1,0 +1,17 @@
+id: 019e242d-0aeb-7250-aece-eaf082a180b6
+spec_id: STORY-10
+agreed_id: STORY-10
+title: Persistent SessionStore implementation
+description: |-
+  ## Acceptance
+  - A second `SessionStore` impl (Postgres or sqlx-sqlite) is added behind the existing trait.
+  - Conversations survive an `aida-chat` server restart.
+  - The agent and HTTP layers compile unchanged when switching implementations.
+  - An eviction policy is configurable (idle TTL, hard age cap, max-per-user).
+status: Draft
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:52.235347210Z
+modified_at: 2026-05-14T01:49:52.235347210Z
+req_type: Story
