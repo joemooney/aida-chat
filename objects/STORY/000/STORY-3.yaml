@@ -11,12 +11,12 @@ description: |-
   - `ANTHROPIC_API_KEY` is required at startup; missing key produces a clear error, not a runtime panic on first chat.
   - A bounded `max_tool_iterations` (e.g., 10) prevents runaway loops.
   - Loop exits cleanly when the model returns `stop_reason=end_turn` with no pending tool_use.
-status: Approved
+status: InProgress
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:19:58.889904404Z
-modified_at: 2026-05-14T01:19:58.889904404Z
+modified_at: 2026-05-14T01:42:53.283657789Z
 req_type: Story
 relationships:
 - rel_type: Child
