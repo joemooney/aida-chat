@@ -1,0 +1,24 @@
+id: 019e2411-c7e5-7ec0-862a-f0f7ec57ea48
+spec_id: STORY-4
+agreed_id: STORY-4
+title: 'Scoped tools: aida, fs, grep with path confinement'
+description: |-
+  Implement the tool surface exposed to the agent. All file-path inputs go through one `resolve_within_repo(p)` helper that canonicalizes and rejects anything outside `repo_root` or inside `.git/`/`.aida-store/objects/` (we still expose AIDA data via the `aida_*` tools, not by reading the orphan worktree directly).
+
+  Tools:
+  - `aida_list`, `aida_show`, `aida_search`, `aida_history` — spawn `aida` subprocess with a fixed-arg allowlist. No shell, no arbitrary flags.
+  - `read_file(path)` — UTF-8 only, size cap (e.g., 256 KB), returns full file or a sliced range.
+  - `list_directory(path)` — names + types only.
+  - `grep_repo(pattern, path_glob?)` — ripgrep wrapper; if `rg` not installed, fall back to a Rust grep crate.
+
+  ## Acceptance
+  - Unit tests cover: `../` escape rejected, absolute path outside repo rejected, symlink escape rejected, `.git` access denied, unknown aida subcommand rejected.
+  - Each tool has a JSON schema published in the Anthropic `tools` array (name, description, `input_schema`).
+  - No tool can ever spawn a shell (`/bin/sh -c`); all subprocesses use `Command::new(..)` with explicit args.
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:20:05.605451881Z
+modified_at: 2026-05-14T01:20:05.605451881Z
+req_type: Story
