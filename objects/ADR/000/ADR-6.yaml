@@ -1,0 +1,48 @@
+id: 019e242c-68e5-7d00-81bf-53fda289d415
+spec_id: ADR-6
+agreed_id: ADR-6
+title: Use a custom Rust agent loop talking directly to the Anthropic Messages API
+description: |-
+  ## Decision
+  The aida-chat backend implements its own streaming agent loop in Rust
+  against `https://api.anthropic.com/v1/messages`. It does **not** spawn
+  `claude` CLI subprocesses, and it does **not** use the Python or
+  TypeScript Claude Agent SDK as a sidecar.
+
+  ## Context
+  Three viable backends were on the table:
+  1. Custom Rust agent loop (chosen).
+  2. Spawn `claude` CLI subprocess per user, with cwd=repo and permission
+     settings restricting tools.
+  3. Run a Python/TS Claude Agent SDK process as a sidecar; Leptos backend
+     proxies to it.
+
+  ## Rationale
+  - The user requirement was "limit what the Claude session can query to
+    just this repo and the aida-store." With a custom loop, the *set of
+    tools we publish* is the *set of things the model can do* — scoping
+    falls out naturally rather than being enforced by configuring a
+    third-party agent's permission system.
+  - Pure Rust binary — no Node.js or Python runtime needed on the server.
+  - Streaming + tool dispatch in ~550 lines (`src/server/agent.rs`),
+    small enough to audit.
+  - No subprocess lifecycle to manage per user.
+
+  ## Consequences
+  - We own the SSE parser for Anthropic's stream events.
+  - We can't piggyback on the Claude Agent SDK's automatic features
+    (memory, compaction, prompt caching helpers) — if we want them we
+    implement them.
+  - Tool implementations are Rust functions, easy to unit-test (see
+    the path-confinement tests in `src/server/tools/fs.rs`).
+
+  ## Related
+  - [[EPIC-1]] — the EPIC this decision underpins.
+  - [[STORY-3]] — the agent-loop implementation.
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:10.757476810Z
+modified_at: 2026-05-14T01:49:10.757476810Z
+req_type: Decision
