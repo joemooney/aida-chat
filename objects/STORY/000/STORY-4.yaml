@@ -15,12 +15,12 @@ description: |-
   - Unit tests cover: `../` escape rejected, absolute path outside repo rejected, symlink escape rejected, `.git` access denied, unknown aida subcommand rejected.
   - Each tool has a JSON schema published in the Anthropic `tools` array (name, description, `input_schema`).
   - No tool can ever spawn a shell (`/bin/sh -c`); all subprocesses use `Command::new(..)` with explicit args.
-status: Approved
+status: InProgress
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:20:05.605451881Z
-modified_at: 2026-05-14T01:20:05.605451881Z
+modified_at: 2026-05-14T01:42:54.810868403Z
 req_type: Story
 relationships:
 - rel_type: Child
