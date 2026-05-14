@@ -22,12 +22,12 @@ description: |-
   - A user can ask "summarize the project overview" and see the agent read files from the repo to answer.
   - Path-escape attempts (e.g., `../../etc/passwd`) and `aida` subcommands outside the read-only allowlist are rejected at the tool layer with unit-test coverage.
   - The `SessionStore` is behind a trait so the in-memory implementation can be swapped without touching agent/HTTP layers.
-status: Approved
+status: InProgress
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:19:45.953029390Z
-modified_at: 2026-05-14T01:19:45.953029390Z
+modified_at: 2026-05-14T01:42:56.780826494Z
 req_type: Epic
 relationships:
 - rel_type: Parent
