@@ -1,0 +1,19 @@
+id: 019e2411-96cb-7e80-b3f9-c668d2fab8d4
+spec_id: STORY-2
+agreed_id: STORY-2
+title: Leptos+Axum SSR app shell with streaming chat view
+description: |-
+  Bootstrap a `cargo leptos` (start-axum template) project. Single chat view: header, scrollable message list, input box at the bottom. Streams assistant text via SSE; "New chat" button starts a fresh session. Session id persisted in localStorage.
+
+  ## Acceptance
+  - `cargo leptos serve` builds and serves on the registered port (8091).
+  - The browser maintains a session id across page reloads.
+  - Assistant replies render token-by-token (visible streaming, not whole-message on completion).
+  - The UI degrades gracefully when the SSE connection drops mid-stream (shows an error, doesn't hang).
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:19:53.035992577Z
+modified_at: 2026-05-14T01:19:53.035992577Z
+req_type: Story
