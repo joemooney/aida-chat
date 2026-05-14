@@ -1,0 +1,56 @@
+id: 019e242c-9450-74b3-8ec6-46528d3a2dbc
+spec_id: ADR-7
+agreed_id: ADR-7
+title: Expose a tool-call surface; do not pre-stuff requirements into the system prompt
+description: |-
+  ## Decision
+  The agent's system prompt is short and tells the model *what tools
+  exist*. The model calls tools (`aida_list`, `aida_show`, `read_file`,
+  `grep_repo`, etc.) on demand to fetch what it needs. We do **not**
+  pre-stuff the full requirements summary or repo contents into the
+  system prompt.
+
+  ## Context
+  The existing `aida-server/src/chat.rs` (in the sibling `aida` repo)
+  takes the opposite approach: it builds `project_context +
+  requirements_summary + git_context` and inlines all of it into the
+  system prompt at request time. That's why aida-server's chat works
+  without tool use.
+
+  When we considered reusing aida-server as the backend for this UI, we
+  explicitly chose to go in a different direction.
+
+  ## Rationale
+  - **Scales with repo size and requirement count.** A pre-stuffed
+    prompt grows linearly with project content; a tool-call surface
+    stays small regardless.
+  - **Always fresh.** Tool calls hit live state at request time. A
+    pre-stuffed prompt goes stale within a single conversation if the
+    user (or another agent) edits requirements mid-session.
+  - **Cheaper.** No tokens spent shipping unread context. The model
+    reads what it needs, when it needs it.
+  - **Auditable.** The UI surfaces every tool call as a badge — the
+    user can see exactly which files / requirements / searches the
+    agent looked at to answer their question.
+
+  ## Consequences
+  - More round-trips per user turn (one Anthropic call + tool exec +
+    another Anthropic call, vs. a single beefy prompt-stuffed call).
+  - The agent loop has to be implemented end-to-end (covered by the
+    [[decision-custom-rust-agent-loop]] decision).
+  - Small projects with a tiny requirements set might actually be
+    *slower* than the stuffed-prompt approach. Acceptable trade-off
+    given the target use case is larger projects.
+
+  ## Related
+  - [[EPIC-1]], [[STORY-3]], [[STORY-4]]
+  - Considered-and-rejected: pivot to building only a Leptos client
+    for aida-server's existing `/api/v2/chat`. Rejected because the
+    static-context approach doesn't fit "ask anything about the repo".
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:21.872453687Z
+modified_at: 2026-05-14T01:49:21.872453687Z
+req_type: Decision
