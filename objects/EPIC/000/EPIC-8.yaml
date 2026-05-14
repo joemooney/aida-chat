@@ -1,0 +1,44 @@
+id: 019e242c-c207-7270-89bc-80514bff4b3d
+spec_id: EPIC-8
+agreed_id: EPIC-8
+title: 'aida-chat v1: multi-user service (auth, persistence, isolation, limits)'
+description: |-
+  ## Goal
+  Turn aida-chat from a local single-user tool into a real multi-user
+  service that PMs and stakeholders can hit without each one needing
+  their own Rust toolchain. v0 ([[EPIC-1]]) is in-memory and unauthenticated.
+
+  ## Scope (rough; each child has its own Acceptance)
+  - Auth in front of `/api` and the chat page.
+  - Persistent `SessionStore` so conversations survive a server restart.
+  - Per-user API-key isolation (or at minimum, per-user billing
+    attribution against the server-wide key).
+  - Per-user rate limits and tool-iteration caps so one runaway
+    conversation can't burn the shared budget.
+  - Conversation export so users can grab a markdown copy of a session.
+  - Tool-call inspector in the UI — click a tool badge to see the full
+    input/output of that tool call, not just its name.
+
+  ## Acceptance
+  - Two different users hitting the same server see only their own
+    conversations, even with the same browser fingerprint.
+  - Restarting the server preserves at least the last N days of
+    conversations for logged-in users.
+  - A single user cannot exceed a configured per-session and per-hour
+    Anthropic spend cap.
+
+  ## Non-goals
+  - SSO, RBAC beyond user/admin.
+  - Embeddings/vector index — explicitly out per ADR (covered already
+    in v0 design discussion).
+
+  ## Related
+  - [[EPIC-1]] — the v0 foundation this builds on.
+  - [[adr-6]] / [[adr-7]] — architectural decisions that constrain v1.
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-14T01:49:33.575945266Z
+modified_at: 2026-05-14T01:49:33.575945266Z
+req_type: Epic
