@@ -45,6 +45,7 @@ pub fn all_tool_specs() -> Vec<Tool> {
         aida::aida_history_spec(),
         aida::aida_resource_spec(),
         aida::aida_comment_add_spec(),
+        aida::aida_add_spec(),
     ]
 }
 
@@ -66,6 +67,7 @@ pub async fn dispatch(
         "aida_history" => aida::aida_history(cfg, input).await,
         "aida_resource" => aida::aida_resource(cfg, input).await,
         "aida_comment_add" => aida::aida_comment_add(cfg, input).await,
+        "aida_add" => aida::aida_add(cfg, input).await,
         other => Err(ToolError::NotAllowed(format!("unknown tool {other}"))),
     }
 }

@@ -84,7 +84,7 @@ async fn main() -> ExitCode {
         );
     }
 
-    let marker = format!(
+    let comment_marker = format!(
         "mcp_smoke temporary add_comment check {}",
         std::process::id()
     );
@@ -96,16 +96,47 @@ async fn main() -> ExitCode {
         "tools/call add_comment STORY-21",
         client.call_tool(
             "add_comment",
-            json!({"id": "STORY-21", "text": marker.clone()})
+            json!({"id": "STORY-21", "text": comment_marker.clone()})
         )
     );
-    match delete_smoke_comment("STORY-21", &marker) {
+    match delete_smoke_comment("STORY-21", &comment_marker) {
         Ok(true) => println!("✓ cleaned up temporary add_comment smoke comment"),
         Ok(false) => {
             println!("⚠ add_comment returned ok, but no persisted comment was visible to clean up")
         }
         Err(e) => {
             println!("FAIL: cleanup temporary comment: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+
+    let req_marker = format!("mcp_smoke temporary add_requirement {}", std::process::id());
+    // Live AIDA 0.5.2 tools/list advertises add_requirement(type, title,
+    // description, status). This smoke intentionally checks whether the
+    // success response is backed by a CLI-visible persisted requirement;
+    // STORY-22 keeps the product write path on `aida add` while this returns
+    // success without persistence.
+    step!(
+        "tools/call add_requirement task",
+        client.call_tool(
+            "add_requirement",
+            json!({
+                "type": "task",
+                "title": req_marker.clone(),
+                "description": "temporary MCP add_requirement smoke; delete me",
+                "status": "draft"
+            })
+        )
+    );
+    match delete_smoke_requirement(&req_marker) {
+        Ok(Some(spec_id)) => {
+            println!("✓ cleaned up temporary add_requirement smoke spec {spec_id}")
+        }
+        Ok(None) => println!(
+            "⚠ add_requirement returned ok, but no persisted requirement was visible to clean up"
+        ),
+        Err(e) => {
+            println!("FAIL: cleanup temporary requirement: {e}");
             return ExitCode::FAILURE;
         }
     }
@@ -156,4 +187,45 @@ fn delete_smoke_comment(spec_id: &str, marker: &str) -> Result<bool, String> {
         }
     }
     Ok(false)
+}
+
+fn delete_smoke_requirement(marker: &str) -> Result<Option<String>, String> {
+    let out = StdCommand::new("aida")
+        .args(["search", marker])
+        .output()
+        .map_err(|e| format!("spawn aida search: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "aida search exited with {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let Some(spec_id) = parse_spec_id(&stdout) else {
+        return Ok(None);
+    };
+    let delete = StdCommand::new("aida")
+        .args(["del", "-y", &spec_id])
+        .output()
+        .map_err(|e| format!("spawn aida del: {e}"))?;
+    if delete.status.success() {
+        Ok(Some(spec_id))
+    } else {
+        Err(format!(
+            "aida del exited with {}: {}",
+            delete.status,
+            String::from_utf8_lossy(&delete.stderr).trim()
+        ))
+    }
+}
+
+fn parse_spec_id(text: &str) -> Option<String> {
+    text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+        .find(|token| {
+            token.contains('-')
+                && token.chars().any(|c| c.is_ascii_digit())
+                && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
+        .map(str::to_string)
 }
