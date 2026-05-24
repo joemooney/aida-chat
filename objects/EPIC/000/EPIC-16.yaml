@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-24T07:06:31.115659540Z
+modified_at: 2026-05-24T15:30:07.847497361Z
 req_type: Epic
 tags:
 - first-consumer
@@ -16,3 +16,40 @@ tags:
 - substrate-grounded
 - virtuous-loop
 - vision
+comments:
+- id: 019e5a9b-9b67-7521-af08-e49d4a7152e1
+  author: joe
+  content: |-
+    Master advisor verdict on the /ultraplan output (saved to docs/plans/2026-05-24-epic-16-aida-chat-evolution.md): STRONG APPROVE with three refinements + one strategic question.
+
+    **Approve rationale:** Excellent foundational-slice plan. Standout moves:
+
+    - **Scope-cut to PR 1 = MCP-first + trace tool + system prompt; 5 feedback loops as named follow-up PRs (PR 2-6)** — exactly right. Lands the infrastructure first, then the loops compose. Each loop is one focused PR.
+    - **Hand-rolled MCP client (~200 LOC) instead of pulling rmcp** — preserves the auditable, dependency-light ethos of existing tools/. Right substrate-discipline call.
+    - **Singleton MCP subprocess (OnceCell + lazy spawn)** modeled on backends/claude_cli.rs's LiveProcessRegistry pattern but simpler — reuse-not-reinvent done correctly.
+    - **Tool-spec stability (existing aida_list / show / search / history names + schemas preserved)** — implementations swap underneath; agent contract unchanged. Right migration shape.
+    - **System prompt update (3 lines)** asks the model to cite SPEC-ID + path:line for grounded claims. The differentiation thesis made operational.
+    - **find_traces as the killer demo** — the SPEC-ID-to-file:line mapping is exactly the substrate-grounded surface generic LLM chats lack. Sample manual verification (Prompt 2: 'Where is EPIC-1 implemented?') makes the value visible.
+    - **CLI fallback path** — graceful degradation when MCP unavailable. Important for trust.
+
+    **Three refinements:**
+
+    1. **MCP subprocess CWD must be the target project, not aida-chat's CWD.** The plan adds ServerConfig.mcp_command + mcp_args but doesn't address the subprocess's working directory. aida-chat's OVERVIEW.md vision is 'scoped chat UI you can point at ANY project' — so the mcp-serve must run in THAT project's directory to serve THAT project's substrate. Today aida-chat already has a repo_root config (per the AIDA_CHAT_REPO env hint in the plan). The mcp-serve subprocess should be spawned with cwd = ServerConfig.repo_root. Otherwise aida-chat queries aida-chat's own substrate (wrong) rather than the user's target project (right).
+
+    2. **find_traces regex should handle AIDA's full trace-comment format.** The plan's regex is . AIDA's actual trace format is  (per CLAUDE.md). The pipe + ai:tool suffix is common. Regex should be  or similar to match correctly in single-spec + multi-spec lines while skipping the | ai:tool tail. Validate against scan of own codebase before shipping.
+
+    3. **MCP server respawn on failure.** The plan says 'restarted on failure' but doesn't detail the mechanism. backends/claude_cli.rs's pattern is eviction-from-map; the singleton variant needs a 'kill + respawn on next call' policy. Worth specifying: if the OnceCell's client returns McpError on a tool call AND the subprocess is dead (Child::try_wait returns Some), replace the OnceCell value via Mutex<OnceCell> swap. Otherwise a dead mcp-serve permanently disables MCP for the session lifetime — degrades to CLI fallback forever, even after operator restarts the AIDA install.
+
+    **One strategic question for the implementer:**
+
+    The plan keeps existing tool *names* stable (aida_list, aida_show, etc.) but the MCP server's actual tool names are list_requirements, show_requirement, search_requirements. The plan handles this with argument-translation in tools/aida.rs. Worth confirming with a smoke test before deep implementation: run aida mcp-serve manually, send tools/list, and verify the actual names + schemas match the plan's assumption. If AIDA's MCP-server tool names differ from the plan's, the translation table is the one place to fix — but better to know before writing the wrappers.
+
+    **Non-blocking observation:**
+
+    The Follow-up PRs section (PR 2-6) is gold — each is a focused, named, composable slice. Recommend filing each as a child STORY under EPIC-16 NOW (in aida-chat's substrate) so the implementer + future agents have queryable anchors. Master can do this if the implementer prefers to focus on PR 1.
+
+    **Ship PR 1.** Trailer: (EPIC-16). Standard cadence — aida session start --owns EPIC-16 → implement per plan + refinements → cargo build --features ssr → cargo test → aida pr ship → aida session end. Manual verification (the 4 prompts in the plan's Verification section) is the load-bearing test for the differentiation thesis.
+
+    — master advisor (from aida repo, dispatching to aida-chat substrate)
+  created_at: 2026-05-24T15:30:07.847497361Z
+  modified_at: 2026-05-24T15:30:07.847497361Z
