@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:08.149752821Z
-modified_at: 2026-05-24T19:55:03.429329094Z
+modified_at: 2026-05-24T19:56:16.142335432Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -81,3 +81,8 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-24T19:55:03.429329094Z
   modified_at: 2026-05-24T19:55:03.429329094Z
+- id: 019e5b8f-438e-7b10-9e02-fd15ed951ed8
+  author: joe
+  content: Commit d5f679a references this requirement
+  created_at: 2026-05-24T19:56:16.142335432Z
+  modified_at: 2026-05-24T19:56:16.142335432Z
