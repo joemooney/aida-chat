@@ -3,12 +3,12 @@ spec_id: STORY-22
 agreed_id: STORY-22
 title: 'aida-chat feedback loop 2: chat → new task/bug (pre-filled aida add)'
 description: When the chat surfaces friction with no existing SPEC, offer 'file as TASK' or 'file as BUG' with title + description + suggested parent. One-click executes 'aida add' with the prefilled args. Spec ID returned and shown inline. trace:EPIC-16
-status: InProgress
+status: Done
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:08.149752821Z
-modified_at: 2026-05-24T19:45:59.779341631Z
+modified_at: 2026-05-24T19:46:28.859054249Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
