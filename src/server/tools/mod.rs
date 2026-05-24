@@ -1,8 +1,8 @@
 // trace:STORY-4 | ai:claude
 //
 // The tool surface the agent is allowed to invoke. Every tool here is
-// read-only and confined: file/grep tools are confined to `repo_root`,
-// `aida_*` tools shell out only to a fixed allowlist of subcommands.
+// confined: file/grep tools are confined to `repo_root`, `aida_*`
+// tools shell out only to a fixed allowlist of subcommands.
 
 pub mod aida;
 pub mod fs;
@@ -44,6 +44,7 @@ pub fn all_tool_specs() -> Vec<Tool> {
         aida::aida_search_spec(),
         aida::aida_history_spec(),
         aida::aida_resource_spec(),
+        aida::aida_comment_add_spec(),
     ]
 }
 
@@ -64,6 +65,7 @@ pub async fn dispatch(
         "aida_search" => aida::aida_search(cfg, input).await,
         "aida_history" => aida::aida_history(cfg, input).await,
         "aida_resource" => aida::aida_resource(cfg, input).await,
+        "aida_comment_add" => aida::aida_comment_add(cfg, input).await,
         other => Err(ToolError::NotAllowed(format!("unknown tool {other}"))),
     }
 }

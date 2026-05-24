@@ -9,7 +9,9 @@
 //      explicit subcommand allowlist. Used when MCP returns
 //      `Unavailable`, `Closed`, or `Timeout` — and always for
 //      `aida_history`, since AIDA's MCP server does not expose a
-//      `history` tool.
+//      `history` tool. `aida_comment_add` is also CLI-backed until
+//      AIDA's MCP add_comment implementation stores text as comment
+//      content rather than author metadata.
 //
 // Either way the model can never reach a shell: arguments are passed as
 // explicit `args` (no shell expansion) and the subcommand is fixed.
@@ -109,6 +111,29 @@ pub fn aida_resource_spec() -> Tool {
                 }
             },
             "required": ["action"]
+        }),
+    }
+}
+
+pub fn aida_comment_add_spec() -> Tool {
+    Tool {
+        name: "aida_comment_add",
+        description: "Append a comment to an AIDA requirement (capture a discussion summary, \
+            design note, or decision). Use sparingly — only when the user signals 'save this' \
+            or the discussion produced a substantive note worth keeping.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "spec_id": {
+                    "type": "string",
+                    "description": "SPEC-ID such as EPIC-16 or STORY-21"
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Comment text to append, up to 8 KiB"
+                }
+            },
+            "required": ["spec_id", "text"]
         }),
     }
 }
@@ -249,6 +274,29 @@ pub async fn aida_resource(cfg: &ServerConfig, input: &Value) -> Result<String, 
     }
 }
 
+// trace:STORY-21 | ai:codex
+pub async fn aida_comment_add(cfg: &ServerConfig, input: &Value) -> Result<String, ToolError> {
+    let spec_id = input
+        .get("spec_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::BadInput("missing 'spec_id'".into()))?;
+    let text = input
+        .get("text")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::BadInput("missing 'text'".into()))?;
+    validate_comment_input(spec_id, text)?;
+    run_aida(
+        cfg,
+        &[
+            "comment".into(),
+            "add".into(),
+            spec_id.to_string(),
+            text.to_string(),
+        ],
+    )
+    .await
+}
+
 // --------------------------------------------------------------------------
 // Transport helpers
 // --------------------------------------------------------------------------
@@ -325,6 +373,21 @@ fn is_spec_id(s: &str) -> bool {
         && s.contains('-')
 }
 
+fn validate_comment_input(spec_id: &str, text: &str) -> Result<(), ToolError> {
+    if !is_spec_id(spec_id) {
+        return Err(ToolError::BadInput(
+            "spec_id does not look like a SPEC-ID".into(),
+        ));
+    }
+    if text.trim().is_empty() {
+        return Err(ToolError::BadInput("text may not be empty".into()));
+    }
+    if text.len() > 8 * 1024 {
+        return Err(ToolError::BadInput("text may not exceed 8 KiB".into()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,5 +414,13 @@ mod tests {
         let m = unavailable_marker("spawn failed");
         assert!(is_unavailable(&m));
         assert!(!is_unavailable("mcp tool list_requirements: timed out"));
+    }
+
+    #[test]
+    fn comment_add_validators() {
+        assert!(validate_comment_input("STORY-21", "save this note").is_ok());
+        assert!(validate_comment_input("story21", "save this note").is_err());
+        assert!(validate_comment_input("STORY-21", "   ").is_err());
+        assert!(validate_comment_input("STORY-21", &"x".repeat(8 * 1024 + 1)).is_err());
     }
 }

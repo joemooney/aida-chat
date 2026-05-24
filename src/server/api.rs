@@ -7,14 +7,15 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use axum::extract::{Extension, Path, Query};
+use axum::extract::{Extension, Json as AxumJson, Path, Query};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json};
 use axum::routing::{get, post};
 use axum::Router;
 use leptos::prelude::LeptosOptions;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -24,6 +25,7 @@ use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
 use crate::server::config::{Backend, ServerConfig};
 use crate::server::sessions::SessionStore;
+use crate::server::tools::{aida, ToolError};
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -40,6 +42,7 @@ pub fn router(sessions: Arc<dyn SessionStore>, cfg: Arc<ServerConfig>) -> Router
         .route("/info", get(get_info))
         .route("/sessions", post(create_session))
         .route("/sessions/{id}/history", get(get_history))
+        .route("/sessions/{id}/comment", post(add_comment))
         .route("/chat", get(chat_stream))
         .layer(Extension(state))
 }
@@ -82,6 +85,70 @@ async fn get_history(
 struct ChatQuery {
     session_id: String,
     q: String,
+}
+
+#[derive(Deserialize)]
+struct CommentRequest {
+    spec_id: String,
+    text: String,
+}
+
+#[derive(Serialize)]
+struct CommentResponse {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+// trace:STORY-21 | ai:codex
+async fn add_comment(
+    Extension(state): Extension<ApiState>,
+    Path(id): Path<String>,
+    AxumJson(body): AxumJson<CommentRequest>,
+) -> (StatusCode, Json<CommentResponse>) {
+    if state.sessions.get(&id).await.is_none() {
+        return comment_error(StatusCode::NOT_FOUND, "unknown session_id".into());
+    }
+
+    let spec_id = body.spec_id;
+    let text = body.text;
+    match aida::aida_comment_add(
+        &state.cfg,
+        &json!({
+            "spec_id": spec_id.clone(),
+            "text": text,
+        }),
+    )
+    .await
+    {
+        Ok(_) => comment_ok(format!("Comment added to {spec_id}")),
+        Err(ToolError::BadInput(e)) => comment_error(StatusCode::BAD_REQUEST, e),
+        Err(e) => comment_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn comment_ok(message: String) -> (StatusCode, Json<CommentResponse>) {
+    (
+        StatusCode::OK,
+        Json(CommentResponse {
+            ok: true,
+            message: Some(message),
+            error: None,
+        }),
+    )
+}
+
+fn comment_error(status: StatusCode, error: String) -> (StatusCode, Json<CommentResponse>) {
+    (
+        status,
+        Json(CommentResponse {
+            ok: false,
+            message: None,
+            error: Some(error),
+        }),
+    )
 }
 
 async fn chat_stream(
