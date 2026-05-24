@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:38:56.651524973Z
-modified_at: 2026-05-24T20:48:40.070496593Z
+modified_at: 2026-05-24T20:48:43.119918406Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -61,8 +61,3 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-24T19:11:31.963794908Z
   modified_at: 2026-05-24T19:11:31.963794908Z
-- id: 019e5bbf-3c86-7f22-a2ff-8f91b98988b0
-  author: mcp_smoke temporary add_comment check 2838361
-  content: mcp
-  created_at: 2026-05-24T20:48:40.070461861Z
-  modified_at: 2026-05-24T20:48:40.070461861Z
