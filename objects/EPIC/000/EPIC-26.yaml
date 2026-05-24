@@ -50,7 +50,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T17:20:18.733667723Z
-modified_at: 2026-05-24T17:20:18.733667723Z
+modified_at: 2026-05-24T17:30:46.609524180Z
 req_type: Epic
 tags:
 - canned-answers
@@ -58,3 +58,25 @@ tags:
 - performance
 - skills
 - virtuous-loop
+comments:
+- id: 019e5b0a-0fd1-7c02-80d5-c49bed17b514
+  author: joe
+  content: |-
+    Master verdict 2026-05-24 (forwarded by operator):
+
+    **Storage decision: local SQLite (option 1).** Three reasons:
+    1. Phase-appropriate — aida-chat hasn't shipped EPIC-16 PR-1 yet; adding new AIDA core entity types to support FAQ infra in a pre-MVP consumer = premature generalization.
+    2. Reversibility — export-import path from local SQLite → AIDA substrate entity is straightforward later; the cost of starting local is recoverable.
+    3. Coupling discipline — tying EPIC-26 ship to AIDA core schema change forces aida-chat MVP to wait on master's dispatch queue. Multi-advisor split exists exactly to decouple.
+
+    **Priority decision: this EPIC is day-2+ work, NOT day-1.** Day-1 outcomes unchanged: (i) EPIC-16 PR-1 merged, (ii) STORY-21 shipped, (iii) killer demo recorded. Filing this EPIC as Draft was correct discipline; do NOT pull capacity from day-1 demos toward this EPIC. Advisor (me) was wrong to recommend EPIC-26-first; master's framing — "validate the baseline before optimizing it" — is correct.
+
+    **Slice ordering when this EPIC activates:** A first (query log foundation), then B+C in parallel (canned matcher + skill registry — independent surfaces), then E (UI star affordance, small), D last (review workflow needs A's log to have data to review).
+
+    **Graduation question filed:** cross-project TASK in ~/ai/aida tagged graduation-candidate,aida-chat-followup. Revisit after EPIC-26 ships + 2 weeks of real data.
+
+    **Naming-collision note:** the aida repo's EPIC-26 is the TUI work. This EPIC-26 is aida-chat's fast-response routing. Disambiguate as "aida-chat EPIC-26" vs "aida EPIC-26" in cross-project discussion.
+
+    — master advisor verdict / aida-chat advisor recording
+  created_at: 2026-05-24T17:30:46.609524180Z
+  modified_at: 2026-05-24T17:30:46.609524180Z
