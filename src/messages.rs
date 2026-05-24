@@ -94,8 +94,9 @@ pub struct SpecResponse {
     pub error: Option<String>,
 }
 
-/// `POST /api/sessions/:id/memory` request body (STORY-23). `type`
-/// lands on the wire as `type`; `r#` is only Rust-keyword escaping.
+/// `POST /api/sessions/:id/memory` request body (STORY-23). Same
+/// idiom as `SpecRequest`: `type` lands on the wire as `type`; the
+/// `r#` is just Rust-keyword escaping. Field order mirrors the brief.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryRequest {
     pub name: String,
@@ -104,7 +105,9 @@ pub struct MemoryRequest {
     pub body: String,
 }
 
-/// `POST /api/sessions/:id/memory` response body (STORY-23).
+/// `POST /api/sessions/:id/memory` response body (STORY-23). On success:
+/// `ok=true`, `path=Some("/some/dir/foo.md")`, optional `message`. On
+/// failure: `ok=false`, `error=Some(...)`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryResponse {
     pub ok: bool,
@@ -254,5 +257,77 @@ mod spec_contract_tests {
         assert_eq!(back.tool_calls[0].input["spec_id"], "STORY-14");
         assert_eq!(back.tool_calls[1].output, "error: bad input");
         assert!(!json.contains("input_preview"));
+    }
+}
+
+#[cfg(test)]
+mod memory_contract_tests {
+    // trace:STORY-23 | ai:claude
+    use super::*;
+
+    #[test]
+    fn memory_request_serializes_type_field_unprefixed() {
+        let req = MemoryRequest {
+            name: "login-edge-case".into(),
+            description: "stash this corrective pattern".into(),
+            r#type: "feedback".into(),
+            body: "When the model proposes X, prefer Y because…".into(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        // Verify the on-the-wire field name is `type`, not `r#type`.
+        assert!(json.contains(r#""type":"feedback""#), "json was {json}");
+        assert!(json.contains(r#""name":"login-edge-case""#));
+        assert!(json.contains(r#""description":"stash this corrective pattern""#));
+        assert!(json.contains(r#""body":"When the model proposes X, prefer Y because…""#));
+    }
+
+    #[test]
+    fn memory_request_roundtrip() {
+        let req = MemoryRequest {
+            name: "use-explicit-paths".into(),
+            description: "principle".into(),
+            r#type: "user".into(),
+            body: "lorem".into(),
+        };
+        let s = serde_json::to_string(&req).unwrap();
+        let back: MemoryRequest = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.name, "use-explicit-paths");
+        assert_eq!(back.description, "principle");
+        assert_eq!(back.r#type, "user");
+        assert_eq!(back.body, "lorem");
+    }
+
+    #[test]
+    fn memory_response_success_skips_error_field() {
+        let r = MemoryResponse {
+            ok: true,
+            path: Some("/home/joe/.claude/projects/aida-chat/memory/login-edge-case.md".into()),
+            message: Some("written".into()),
+            error: None,
+        };
+        let s = serde_json::to_string(&r).unwrap();
+        assert!(s.contains(r#""ok":true"#));
+        assert!(s.contains(r#""path":"/home/joe/.claude"#));
+        assert!(!s.contains(r#""error""#), "error should be skipped: {s}");
+    }
+
+    #[test]
+    fn memory_response_error_path() {
+        let json = r#"{"ok":false,"error":"slug already exists"}"#;
+        let back: MemoryResponse = serde_json::from_str(json).unwrap();
+        assert!(!back.ok);
+        assert_eq!(back.error.as_deref(), Some("slug already exists"));
+        assert!(back.path.is_none());
+        assert!(back.message.is_none());
+    }
+
+    #[test]
+    fn memory_response_minimal_success_still_parses() {
+        // Backend may legitimately return only `ok` and `path`.
+        let json = r#"{"ok":true,"path":"/tmp/foo.md"}"#;
+        let back: MemoryResponse = serde_json::from_str(json).unwrap();
+        assert!(back.ok);
+        assert_eq!(back.path.as_deref(), Some("/tmp/foo.md"));
+        assert!(back.message.is_none());
     }
 }

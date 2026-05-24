@@ -419,6 +419,31 @@ html, body {
   font-size: 14px;
 }
 .spec-title-input:focus { outline: none; border-color: var(--accent); }
-/* Pull the two adjacent capture-affordance rows visually together — the
-   STORY-21 button + STORY-22 button stack with no double-gap. */
+/* Pull adjacent capture-affordance rows visually together — the
+   STORY-21 / STORY-22 / STORY-23 buttons stack with no double-gap. */
 .actions + .actions { margin-top: 2px; }
+
+/* --- STORY-23: memory write capture affordance --- */
+/* Reuses .action-btn / .actions / .comment-form / .comment-row /
+   .comment-label / .comment-text / .comment-error / .comment-actions /
+   .save-btn / .cancel-btn / .capture-badge / .spec-type-select from
+   the earlier stories — the type dropdown CSS is identical. */
+.memory-name-input,
+.memory-description-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+}
+.memory-name-input {
+  font-family: var(--mono);
+  max-width: 320px;
+}
+.memory-name-input:focus,
+.memory-description-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
