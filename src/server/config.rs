@@ -49,6 +49,13 @@ pub struct ServerConfig {
     pub max_read_bytes: usize,
     /// Idle TTL before a session is evicted.
     pub session_ttl: std::time::Duration,
+    /// Command to launch the AIDA MCP server. Default `"aida"`.
+    /// Override with `AIDA_CHAT_MCP_COMMAND` (e.g. `/bin/false` to
+    /// force the CLI-fallback path in tools that have one).
+    pub mcp_command: PathBuf,
+    /// Args passed to `mcp_command`. Default `["mcp-serve"]`. Override
+    /// with `AIDA_CHAT_MCP_ARGS` as a shell-style whitespace-split string.
+    pub mcp_args: Vec<String>,
 }
 
 impl ServerConfig {
@@ -80,6 +87,16 @@ impl ServerConfig {
         };
         let repo_root = std::fs::canonicalize(&repo_root)
             .map_err(|e| format!("canonicalize repo_root {}: {e}", repo_root.display()))?;
+        let mcp_command = std::env::var("AIDA_CHAT_MCP_COMMAND")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("aida"));
+        let mcp_args = std::env::var("AIDA_CHAT_MCP_ARGS")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.split_whitespace().map(String::from).collect())
+            .unwrap_or_else(|| vec!["mcp-serve".to_string()]);
         Ok(Self {
             backend,
             anthropic_api_key,
@@ -89,6 +106,8 @@ impl ServerConfig {
             max_output_tokens: 4096,
             max_read_bytes: 256 * 1024,
             session_ttl: std::time::Duration::from_secs(60 * 60),
+            mcp_command,
+            mcp_args,
         })
     }
 }
