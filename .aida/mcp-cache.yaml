@@ -10,9 +10,9 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T07:06:31.115659540Z
-  modified_at: 2026-05-24T16:20:52.544264932Z
+  modified_at: 2026-05-24T19:41:39.625899128Z
   req_type: Epic
   tags:
   - first-consumer
@@ -122,6 +122,77 @@ requirements:
       — aida-chat advisor
     created_at: 2026-05-24T16:20:52.544264932Z
     modified_at: 2026-05-24T16:20:52.544264932Z
+  - id: 019e5ad9-935e-7ee2-969c-b397b0b77cfe
+    author: 'Codex implementation update: advisor respawn gap fixed for PR-1. Replaced the MCP OnceCell singleton with a swappable Arc-backed global slot, added short unavailable backoff, clears the slot on reader EOF or broken-pipe Closed, maps Closed/Timeout to CLI fallback for legacy tools, and documented the respawn policy in mcp module/client comments. Verification: cargo test --features ssr --lib passes 16/16 including global_respawns_after_child_death; cargo run --example mcp_smoke --features ssr passes against live aida mcp-serve. Manual full aida-chat /api/chat death test was attempted but blocked by local Anthropic API credit exhaustion before any tool call could run.'
+    content: mcp
+    created_at: 2026-05-24T16:37:49.022927862Z
+    modified_at: 2026-05-24T16:37:49.022927862Z
+  - id: 019e5ada-5bfd-70c2-8561-d65900224602
+    author: 'Codex PR opened for PR-1: https://github.com/joemooney/aida-chat/pull/1 at commit c7c0393 ([AI:codex] feat(aida): add MCP-first substrate tools (EPIC-16)). Brief .aida/agent-briefs/codex/EPIC-16-2026-05-24T152433Z.md acknowledged after commit.'
+    content: mcp
+    created_at: 2026-05-24T16:38:40.381160510Z
+    modified_at: 2026-05-24T16:38:40.381160510Z
+  - id: 019e5af9-86e2-7e91-8100-6bf67c85a00d
+    author: joe
+    content: |-
+      Codex shipped the respawn fix in commit c7c0393 (PR #1). Re-verified locally — all four items from the follow-up brief landed:
+
+      1. ✅ `static CLIENT: Mutex<ClientSlot>` swappable cell with `Option<Arc<McpClient>>` + 2s Unavailable backoff cache to avoid spawn-storming a broken install (src/server/mcp/client.rs:87-90).
+      2. ✅ Slot cleared on reader-task EOF, broken-pipe write, and reader-dropped oneshot (lines 197, 207, 312). ID-keyed cleanup (`clear_global_client(client_id)` at line 378 only clears the slot if it still holds this client) — race-guard against fast respawn cycles that I hadn't spelled out in the brief; Codex caught it.
+      3. ✅ `try_mcp` maps `McpError::Closed` and `McpError::Timeout` to `unavailable_marker(...)` at both `global()` and `call_tool()` sites (src/server/tools/aida.rs:264-266, 271-273). CLI fallback now triggers for in-flight calls on transient death.
+      4. ✅ Failure-model doc-comment rewritten to state the new policy explicitly (src/server/mcp/client.rs:18-28).
+
+      **Verification:**
+      - `cargo test --features ssr --lib` → 16/16 pass, including `global_respawns_after_child_death` (spawn → kill → poll until Arc::ptr_eq fails → assert spawn-count log == 2). Test is solid: not relying on timing alone, uses a temp fake-mcp.sh that logs each invocation, asserts both Arc inequality and spawn count.
+      - PR #1 open: https://github.com/joemooney/aida-chat/pull/1
+
+      **Cleared for merge.** Operator's call on when to land.
+
+      **Blocker for downstream day-1 work, NOT PR-1:** Codex hit `400 Bad Request: credit balance is too low` on Anthropic API when attempting the end-to-end /api/chat manual death test. The unit test covers the respawn mechanic at the McpClient layer (which is the load-bearing claim), so merge isn't blocked. But the killer demo NEEDS the anthropic backend — switching to claude-cli would route through Claude Code's built-in tools instead of our scoped MCP-grounded aida_* tools, which would fail to demonstrate the substrate-grounded thesis. Need Anthropic credit before the killer demo can run, and probably before STORY-21 manual verification too. Surfaced to operator.
+
+      — aida-chat advisor
+    created_at: 2026-05-24T17:12:42.978853780Z
+    modified_at: 2026-05-24T17:12:42.978853780Z
+  - id: 019e5b0a-2934-7153-8614-f2bf1c0115b9
+    author: joe
+    content: |-
+      Day-1 plan reaffirmed after master verdict on new EPIC-26 scope:
+
+      1. **EPIC-16 PR-1 merge** — cleared, awaiting operator merge action on https://github.com/joemooney/aida-chat/pull/1
+      2. **STORY-21 ship** — next dispatch once PR-1 merges + Anthropic credit unblocked
+      3. **Killer demo record** — substrate-grounded SPEC-ID + file:line citation prompts, run on the anthropic backend (not claude-cli — claude-cli routes through Claude Code's built-in tools, defeats the differentiation thesis)
+
+      Blockers:
+      - Anthropic credit balance — confirmed via direct probe to /v1/messages: the key in .env returns 400 credit-balance-too-low. Operator believes credit is available elsewhere; likely key/account mismatch. Awaiting operator action to update .env with the right key.
+
+      EPIC-26 (fast-response routing) is filed Draft for day-2+ pickup; explicitly NOT being dispatched today per master verdict ("validate baseline before optimizing").
+
+      — aida-chat advisor
+    created_at: 2026-05-24T17:30:53.108208438Z
+    modified_at: 2026-05-24T17:30:53.108208438Z
+  - id: 019e5b81-e3a9-7a32-945b-aaf24b981ab3
+    author: joe
+    content: |-
+      Substrate-cleanup proposal for STORY-17, STORY-18, STORY-19 (per bootstrap doc's "after PR-1 lands, decide: subsume into EPIC-16's child set, or close as superseded").
+
+      Reading each:
+
+      **STORY-17 — "Substrate-grounded context assembly with source attribution" (Approved, High, parent:EPIC-16, no git linkage).**
+      This is the EPIC-16 thesis restated as a Story. Concretely, the work behind it is what PR-1 just shipped: system prompt update advising SPEC-ID + path:line citation, find_traces tool, MCP-grounded aida_* tools. **Proposed disposition: edit to Completed once PR-1 merges; add a comment pointing at commit c7c0393 + the system-prompt block in src/server/backends/anthropic.rs.**
+
+      **STORY-18 — "Five virtuous-loop capture verbs (chat → comment/task/memory/plan/trace-finding)" (Approved, High, parent:EPIC-16).**
+      This is literally the parent shape of STORY-21..25. STORY-21..25 are the same 5 verbs broken out as individual stories with concrete acceptance — that's the actual work. STORY-18 keeping a separate identity creates the "two specs for the same thing" failure mode CLAUDE.md warns against. **Proposed disposition: edit to Completed (or Rejected as "superseded by STORY-21..25") and add `aida rel add --from STORY-18 --to STORY-21 --type Parent` style links (one per verb) so the graph carries the relationship. Pick Completed over Rejected — STORY-18's intent IS being satisfied; just by 5 stories instead of 1.**
+
+      **STORY-19 — "MCP-first integration contract; CLI + file fallback" (Approved, Medium, parent:EPIC-16, mcp).**
+      This is exactly the architecture EPIC-16 PR-1 delivered: custom JSON-RPC MCP client, CLI fallback path via Unavailable/Closed/Timeout markers, doc-commented failure model. **Proposed disposition: edit to Completed once PR-1 merges; link commit c7c0393.**
+
+      Note none of the three have git linkage today — meaning no commit or trace comment ever pointed at them. Their work happened under EPIC-16's umbrella with traces directly to EPIC-16. The cleanup formalizes that the substrate has converged.
+
+      Operator confirms-or-overrides. I'll only execute the status edits + relationship links after PR-1 merges (so the trace from "Completed" status back to the merge commit is honest, not aspirational).
+
+      — aida-chat advisor
+    created_at: 2026-05-24T19:41:39.625899128Z
+    modified_at: 2026-05-24T19:41:39.625899128Z
 - id: 019e242c-c207-7270-89bc-80514bff4b3d
   spec_id: EPIC-8
   agreed_id: EPIC-8
@@ -162,7 +233,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:33.575945266Z
   modified_at: 2026-05-14T01:49:33.575945266Z
   req_type: Epic
@@ -212,7 +283,7 @@ requirements:
   status: InProgress
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:19:45.953029390Z
   modified_at: 2026-05-14T01:42:57.720075129Z
   req_type: Epic
@@ -238,6 +309,88 @@ requirements:
     content: Initial scaffolding + all 4 child stories implemented and compile-tested. SSR binary builds, wasm hydrate target builds via cargo leptos, 7/7 unit tests pass, server starts and serves the chat page + handles /api/sessions, /api/sessions/:id/history (200/404), and /api/chat SSE. End-to-end with a real Anthropic key still needs a user smoke test in a browser.
     created_at: 2026-05-14T01:42:57.720075129Z
     modified_at: 2026-05-14T01:42:57.720075129Z
+- id: 019e5b00-7b2d-7c53-a5c2-6042b96593f9
+  spec_id: EPIC-26
+  agreed_id: EPIC-26
+  title: 'Fast-response query routing: canned answers + skill-prompts + FAQ review loop'
+  description: |-
+    ## Why
+
+    Operator goal (2026-05-24): speed is of the essence. The substrate-grounding wedge (EPIC-16) is necessary but not sufficient — if a substrate-grounded answer takes 15s while a generic chat answers in 2s, users will reach for the generic chat. Need a fast-path layer that turns repeating queries into instant or near-instant responses, *without* sacrificing substrate-grounding for the long-tail queries.
+
+    Two tiers of fast-path:
+
+    1. **Canned answers** — popular or starred questions get pre-computed responses served from a cache, bypassing the LLM entirely. Latency target: < 50ms cache hit.
+    2. **Skill-prompts** — well-defined prompts pre-bound to a known tool sequence (think Claude Code skills, but baked into aida-chat). User query triggers a focused single-pass execution rather than the generic multi-iteration agent loop. Latency target: 1-2s (one round-trip, no tool fan-out).
+
+    Generic agent loop stays the fallback for novel / long-tail queries.
+
+    ## Closed loop
+
+    The library of canned answers + skills is grown by an AI-assisted review session, not hand-curated. Workflow:
+
+    - Every user query gets logged (timestamp, session, response latency, optional star flag).
+    - Periodic `/aida-chat-review` slash workflow scans the log, ranks by frequency + stars, proposes new canned-or-skill candidates with draft entries.
+    - Operator approves / edits / rejects each candidate; approved entries land in the library.
+
+    ## Differentiation synergy
+
+    This composes with EPIC-16's substrate-grounding thesis: generic chat is slow AND ungrounded; aida-chat is fast (canned/skill) AND substrate-grounded. The killer demo becomes stronger — answer a substrate-grounded question *instantly* from cache, then answer a long-tail question slower-but-substrate-grounded via the full agent loop. Two-stage demo of the wedge.
+
+    ## Proposed decomposition (not yet filed as separate STORYs — awaiting operator validation)
+
+    - **A: Query log** — persist every query with metadata. Foundation; everything else depends on it.
+    - **B: Canned-answer matcher** — at request entry, match against {pattern → response}. Bypass LLM on hit. Initial: exact + simple fuzzy. Future: embedding similarity.
+    - **C: Skill registry** — library of {trigger, prompt, pre-bound tool sequence, optional cached context}. Skill-matched queries route through a single-pass executor, not the generic agent loop.
+    - **D: Periodic review workflow** — `/aida-chat-review` slash, ranks the log, proposes new canned/skill entries.
+    - **E: Star / upvote affordance** — chat UI lets operator flag a query+response as canonical; feeds the review pipeline.
+
+    ## Open questions for operator
+
+    - Priority relative to EPIC-16 follow-ups (STORY-21..25)? Day-1 plan is currently EPIC-16 PR-1 merge → STORY-21 → killer demo. Does this EPIC slide ahead of STORY-21, after, or in parallel?
+    - Latency targets? My assumption: canned < 50ms, skill 1-2s, generic agent loop "whatever it takes." Confirm or sharpen.
+    - Storage for the query log: own aida-chat-local SQLite, or fold into AIDA's substrate?
+
+    ## Out of scope (for this EPIC)
+
+    - Cross-installation FAQ sharing
+    - Multi-user star-voting (one-operator assumption matches current MVP)
+    - Auto-approval (every new canned/skill entry goes through operator review)
+  status: Draft
+  priority: High
+  owner: ''
+  feature: 1-Uncategorized
+  created_at: 2026-05-24T17:20:18.733667723Z
+  modified_at: 2026-05-24T17:30:46.609524180Z
+  req_type: Epic
+  tags:
+  - canned-answers
+  - faq
+  - performance
+  - skills
+  - virtuous-loop
+  comments:
+  - id: 019e5b0a-0fd1-7c02-80d5-c49bed17b514
+    author: joe
+    content: |-
+      Master verdict 2026-05-24 (forwarded by operator):
+
+      **Storage decision: local SQLite (option 1).** Three reasons:
+      1. Phase-appropriate — aida-chat hasn't shipped EPIC-16 PR-1 yet; adding new AIDA core entity types to support FAQ infra in a pre-MVP consumer = premature generalization.
+      2. Reversibility — export-import path from local SQLite → AIDA substrate entity is straightforward later; the cost of starting local is recoverable.
+      3. Coupling discipline — tying EPIC-26 ship to AIDA core schema change forces aida-chat MVP to wait on master's dispatch queue. Multi-advisor split exists exactly to decouple.
+
+      **Priority decision: this EPIC is day-2+ work, NOT day-1.** Day-1 outcomes unchanged: (i) EPIC-16 PR-1 merged, (ii) STORY-21 shipped, (iii) killer demo recorded. Filing this EPIC as Draft was correct discipline; do NOT pull capacity from day-1 demos toward this EPIC. Advisor (me) was wrong to recommend EPIC-26-first; master's framing — "validate the baseline before optimizing it" — is correct.
+
+      **Slice ordering when this EPIC activates:** A first (query log foundation), then B+C in parallel (canned matcher + skill registry — independent surfaces), then E (UI star affordance, small), D last (review workflow needs A's log to have data to review).
+
+      **Graduation question filed:** cross-project TASK in ~/ai/aida tagged graduation-candidate,aida-chat-followup. Revisit after EPIC-26 ships + 2 weeks of real data.
+
+      **Naming-collision note:** the aida repo's EPIC-26 is the TUI work. This EPIC-26 is aida-chat's fast-response routing. Disambiguate as "aida-chat EPIC-26" vs "aida EPIC-26" in cross-project discussion.
+
+      — master advisor verdict / aida-chat advisor recording
+    created_at: 2026-05-24T17:30:46.609524180Z
+    modified_at: 2026-05-24T17:30:46.609524180Z
 - id: 019e2432-7aa7-7961-b6e1-48a5e4f66a52
   spec_id: STORY-15
   agreed_id: STORY-15
@@ -281,7 +434,7 @@ requirements:
   status: Completed
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:55:48.519018503Z
   modified_at: 2026-05-14T03:49:45.424968904Z
   req_type: Story
@@ -316,7 +469,7 @@ requirements:
   status: InProgress
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:20:09.887011301Z
   modified_at: 2026-05-14T01:42:55.715098642Z
   req_type: Story
@@ -336,7 +489,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:50:02.458906292Z
   modified_at: 2026-05-14T01:50:02.458906292Z
   req_type: Story
@@ -352,7 +505,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T15:39:29.362965434Z
   modified_at: 2026-05-24T15:39:29.362965434Z
   req_type: Story
@@ -375,7 +528,7 @@ requirements:
   status: InProgress
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:19:58.889904404Z
   modified_at: 2026-05-14T01:42:53.283657789Z
   req_type: Story
@@ -391,7 +544,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:27.368395128Z
   modified_at: 2026-05-24T07:07:27.368395128Z
   req_type: Story
@@ -413,7 +566,7 @@ requirements:
   status: Draft
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:49.677539718Z
   modified_at: 2026-05-14T01:49:49.677539718Z
   req_type: Story
@@ -436,7 +589,7 @@ requirements:
   status: InProgress
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:19:53.035992577Z
   modified_at: 2026-05-14T01:42:52.369417688Z
   req_type: Story
@@ -457,7 +610,7 @@ requirements:
   status: Draft
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:52.235347210Z
   modified_at: 2026-05-14T01:49:52.235347210Z
   req_type: Story
@@ -473,7 +626,7 @@ requirements:
   status: Approved
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:29.374905446Z
   modified_at: 2026-05-24T07:07:29.374905446Z
   req_type: Story
@@ -495,7 +648,7 @@ requirements:
   status: Draft
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:57.210624571Z
   modified_at: 2026-05-14T01:49:57.210624571Z
   req_type: Story
@@ -523,7 +676,7 @@ requirements:
   status: InProgress
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:20:05.605451881Z
   modified_at: 2026-05-14T01:42:54.810868403Z
   req_type: Story
@@ -539,7 +692,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T15:39:32.464806097Z
   modified_at: 2026-05-24T15:39:32.464806097Z
   req_type: Story
@@ -554,7 +707,7 @@ requirements:
   status: Approved
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:28.756084583Z
   modified_at: 2026-05-24T07:07:28.756084583Z
   req_type: Story
@@ -575,7 +728,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:54.690198320Z
   modified_at: 2026-05-14T01:49:54.690198320Z
   req_type: Story
@@ -591,7 +744,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T15:39:08.149752821Z
   modified_at: 2026-05-24T15:39:08.149752821Z
   req_type: Story
@@ -606,7 +759,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T15:39:18.630304019Z
   modified_at: 2026-05-24T15:39:18.630304019Z
   req_type: Story
@@ -621,7 +774,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:28.175249307Z
   modified_at: 2026-05-24T07:07:28.175249307Z
   req_type: Story
@@ -634,16 +787,64 @@ requirements:
   agreed_id: STORY-21
   title: 'aida-chat feedback loop 1: chat → spec comment (aida comment add)'
   description: When the chat surfaces discussion of an existing SPEC (model references its ID), offer a one-click action to capture the discussion as 'aida comment add <ID> <summary>'. Pre-fill the summary from the relevant message turns. After execution, show the new comment inline so the user sees the substrate growing. trace:EPIC-16
-  status: Approved
+  status: InProgress
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-24T15:38:56.651524973Z
-  modified_at: 2026-05-24T15:38:56.651524973Z
+  modified_at: 2026-05-24T19:11:31.963794908Z
   req_type: Story
   tags:
   - batch:aida-chat-feedback-loops
   - epic:EPIC-16
+  comments:
+  - id: 019e5b2f-b66c-7e91-b490-61e1a85c350c
+    author: joe
+    content: 'Implementation note: live tools/list advertises add_comment(id, text), but the current aida mcp-serve implementation returns success without a CLI-visible persisted comment in this repo; direct MCP source also appears to wire text as author/content incorrectly. STORY-21 backend therefore uses the correct aida comment add CLI write path for the product endpoint while mcp_smoke documents the live MCP behavior. Verified POST /api/sessions/:id/comment success and validation bodies; temporary smoke comments were deleted.'
+    created_at: 2026-05-24T18:11:54.092242630Z
+    modified_at: 2026-05-24T18:11:54.092242630Z
+  - id: 019e5b30-b8dc-7ea3-8e3c-cff9df03221f
+    author: joe
+    content: 'Codex opened stacked PR #2 for STORY-21: https://github.com/joemooney/aida-chat/pull/2 (base codex/epic-16-mcp-foundation until EPIC-16 PR #1 lands). Commit d5f679a. Verification: cargo test --features ssr --lib passed 17/17; cargo run --example mcp_smoke --features ssr passed with documented MCP add_comment persistence defect; HTTP endpoint smoke verified agreed 400/200 JSON contract and temporary comment cleanup.'
+    created_at: 2026-05-24T18:13:00.252994949Z
+    modified_at: 2026-05-24T18:13:00.252994949Z
+  - id: 019e5b66-4e7b-7cf1-8eee-dd5542ec8cf3
+    author: joe
+    content: |-
+      Advisor verdict on both halves of STORY-21:
+
+      **Status correction:** Codex closed their lease and marked Done after the backend landed (PR #2 at d5f679a). The spec body, though, calls out the UI affordance ("offer a one-click action to capture the discussion") as the actual user-facing surface — backend alone isn't the loop. Resetting to In Progress; will move to Done only when both PRs are merged.
+
+      **PR #2 (backend) — cleared.** Verified:
+      - 17/17 tests pass including new comment_add_validators
+      - HTTP smoke verified end-to-end (bad spec_id → 400; valid → 200; cleanup confirmed)
+      - Substrate-discipline call: PR appropriately falls back to CLI because MCP add_comment is broken (silent data loss — filed as cross-project BUG-377 in aida core)
+      - Anthropic backend tool list + system prompt updated to advertise the new tool
+
+      **Claude's frontend (uncommitted in worktree /home/joe/ai/aida-chat-story-21) — cleared to commit.** Verified:
+      - 23/23 tests pass including 7 new app::spec_id_tests (extraction, prefix coverage, word boundaries, markdown links, validator paths)
+      - Build green for ssr + hydrate (wasm) + cargo leptos
+      - Stub markers prominent (two comments calling out the stub + rationale)
+      - TurnView signature change propagated at the call site (no orphan)
+      - schedule_clear correctly gated cfg(feature="hydrate") with no-op SSR variant
+
+      **Contract compatibility — perfect match.** Codex and Claude independently arrived at compatible types:
+      - Both: `CommentRequest { spec_id: String, text: String }`
+      - Both: `CommentResponse { ok: bool, message: Option<String>, error: Option<String> }` with `skip_serializing_if = "Option::is_none"`
+      - One trivial cleanup at merge: Codex duplicated the structs locally in api.rs; should import from `crate::messages` (where Claude put them) before final merge.
+
+      **Integration plan:**
+      1. Operator merges PR #1 to master.
+      2. PR #2 rebases onto master (or operator changes its base ref to master in the GH UI; same diff either way), then merges.
+      3. Claude commits + opens frontend PR off master (now with PR #1 + PR #2 landed).
+      4. Frontend PR drops the stub route + stub fn (the contract is preserved, only the handler swaps).
+      5. Frontend PR merges; STORY-21 marked Done.
+
+      **Cross-project substrate gap filed:** BUG-377 in aida repo — MCP add_comment misroutes text to author field, silent data loss. Tagged aida-chat-blocker for visibility.
+
+      — aida-chat advisor
+    created_at: 2026-05-24T19:11:31.963794908Z
+    modified_at: 2026-05-24T19:11:31.963794908Z
 - id: 019e242d-28be-7ae0-9718-eb506e5a9610
   spec_id: STORY-13
   agreed_id: STORY-13
@@ -655,7 +856,7 @@ requirements:
   status: Draft
   priority: Low
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:59.870264643Z
   modified_at: 2026-05-14T01:49:59.870264643Z
   req_type: Story
@@ -707,7 +908,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:10.757476810Z
   modified_at: 2026-05-14T01:49:10.757476810Z
   req_type: Decision
@@ -763,7 +964,7 @@ requirements:
   status: Approved
   priority: High
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:49:21.872453687Z
   modified_at: 2026-05-14T01:49:21.872453687Z
   req_type: Decision
@@ -817,7 +1018,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:06:44.504292019Z
   modified_at: 2026-05-14T01:06:44.504292019Z
   req_type: Meta
@@ -872,7 +1073,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:06:44.504312620Z
   modified_at: 2026-05-14T01:06:44.504312620Z
   req_type: Meta
@@ -927,7 +1128,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:06:44.504334114Z
   modified_at: 2026-05-14T01:06:44.504334114Z
   req_type: Meta
@@ -943,7 +1144,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:06:44.504239593Z
   modified_at: 2026-05-14T01:06:44.504239593Z
   req_type: Meta
@@ -1007,7 +1208,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:06:44.504330122Z
   modified_at: 2026-05-14T01:06:44.504330122Z
   req_type: Meta
@@ -1066,7 +1267,7 @@ requirements:
   status: Draft
   priority: Medium
   owner: ''
-  feature: Uncategorized
+  feature: 1-Uncategorized
   created_at: 2026-05-14T01:06:44.504326625Z
   modified_at: 2026-05-14T01:06:44.504326625Z
   req_type: Meta
@@ -1075,6 +1276,17 @@ requirements:
   - rel_type: Parent
     target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
     created_at: 2026-05-14T01:06:44.504329262Z
+- id: 019e5b82-ea01-72f2-8b69-f3676748b77a
+  spec_id: SPEC-007
+  title: mcp_smoke temporary add_requirement 2746404
+  description: temporary MCP add_requirement smoke; delete me
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T19:42:46.785717050Z
+  modified_at: 2026-05-24T19:42:46.785717050Z
+  req_type: Task
 id_config:
   format: SingleLevel
   numbering: Global
@@ -1120,8 +1332,8 @@ id_config:
     prefix: META
     description: Database configuration and templates
 features: []
-next_feature_number: 1
-next_spec_number: 7
+next_feature_number: 2
+next_spec_number: 8
 prefix_counters: {}
 relationship_definitions:
 - name: parent
