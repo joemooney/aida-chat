@@ -1,0 +1,1374 @@
+name: aida-chat
+title: aida-chat
+description: ''
+requirements:
+- id: 019e242c-c207-7270-89bc-80514bff4b3d
+  spec_id: EPIC-8
+  agreed_id: EPIC-8
+  title: 'aida-chat v1: multi-user service (auth, persistence, isolation, limits)'
+  description: |-
+    ## Goal
+    Turn aida-chat from a local single-user tool into a real multi-user
+    service that PMs and stakeholders can hit without each one needing
+    their own Rust toolchain. v0 ([[EPIC-1]]) is in-memory and unauthenticated.
+
+    ## Scope (rough; each child has its own Acceptance)
+    - Auth in front of `/api` and the chat page.
+    - Persistent `SessionStore` so conversations survive a server restart.
+    - Per-user API-key isolation (or at minimum, per-user billing
+      attribution against the server-wide key).
+    - Per-user rate limits and tool-iteration caps so one runaway
+      conversation can't burn the shared budget.
+    - Conversation export so users can grab a markdown copy of a session.
+    - Tool-call inspector in the UI — click a tool badge to see the full
+      input/output of that tool call, not just its name.
+
+    ## Acceptance
+    - Two different users hitting the same server see only their own
+      conversations, even with the same browser fingerprint.
+    - Restarting the server preserves at least the last N days of
+      conversations for logged-in users.
+    - A single user cannot exceed a configured per-session and per-hour
+      Anthropic spend cap.
+
+    ## Non-goals
+    - SSO, RBAC beyond user/admin.
+    - Embeddings/vector index — explicitly out per ADR (covered already
+      in v0 design discussion).
+
+    ## Related
+    - [[EPIC-1]] — the v0 foundation this builds on.
+    - [[adr-6]] / [[adr-7]] — architectural decisions that constrain v1.
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:33.575945266Z
+  modified_at: 2026-05-14T01:49:33.575945266Z
+  req_type: Epic
+  relationships:
+  - rel_type: Parent
+    target_id: 019e242d-00ed-7070-9dc2-a5531c525c65
+    created_at: 2026-05-14T01:49:50.244097726Z
+  - rel_type: Parent
+    target_id: 019e242d-0aeb-7250-aece-eaf082a180b6
+    created_at: 2026-05-14T01:49:52.835313565Z
+  - rel_type: Parent
+    target_id: 019e242d-1482-7941-92fb-f9dc327219b5
+    created_at: 2026-05-14T01:49:55.209181617Z
+  - rel_type: Parent
+    target_id: 019e242d-1e5a-7622-aa8e-beda8aebb00a
+    created_at: 2026-05-14T01:49:57.885743565Z
+  - rel_type: Parent
+    target_id: 019e242d-28be-7ae0-9718-eb506e5a9610
+    created_at: 2026-05-14T01:50:00.444679245Z
+  - rel_type: Parent
+    target_id: 019e242d-32da-7a31-9af2-950e26f1b776
+    created_at: 2026-05-14T01:50:02.987234174Z
+- id: 019e2411-7b21-7b61-8e66-9f747a2db659
+  spec_id: EPIC-1
+  agreed_id: EPIC-1
+  title: 'AIDA Chat: web UI talking to a scoped Rust agent backend'
+  description: |-
+    Build a ChatGPT/Claude-style web UI for this repository. A user opens a browser, types a question, and the backend spawns (or routes to) a per-user agent that can answer using only this repo's contents and the AIDA requirements store.
+
+    ## Goals
+    - Single chat-style web page with a text box and streamed assistant replies.
+    - Per-user session on the backend (in-memory now; pluggable for multi-user later).
+    - Agent is a custom Rust loop against the Anthropic Messages API, NOT a `claude` CLI subprocess.
+    - Agent's tool surface is intentionally narrow and confined: read-only access to files under the repo root, ripgrep over those files, and read-only AIDA queries (`list`, `show`, `search`, `history`).
+
+    ## Non-goals (this iteration)
+    - Auth / login.
+    - Persistent conversation history across server restarts.
+    - Multi-tenant resource limits.
+    - Pre-indexed embeddings / vector search.
+
+    ## Acceptance
+    - A user can `cargo leptos serve` the app, open it in a browser, ask "what AIDA epics are open?", and see a streamed answer that demonstrably called `aida` tools.
+    - A user can ask "summarize the project overview" and see the agent read files from the repo to answer.
+    - Path-escape attempts (e.g., `../../etc/passwd`) and `aida` subcommands outside the read-only allowlist are rejected at the tool layer with unit-test coverage.
+    - The `SessionStore` is behind a trait so the in-memory implementation can be swapped without touching agent/HTTP layers.
+  status: InProgress
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:19:45.953029390Z
+  modified_at: 2026-05-14T01:42:57.720075129Z
+  req_type: Epic
+  relationships:
+  - rel_type: Parent
+    target_id: 019e2411-96cb-7e80-b3f9-c668d2fab8d4
+    created_at: 2026-05-14T01:19:53.576046955Z
+  - rel_type: Parent
+    target_id: 019e2411-ada9-71b1-b537-16a0da90f143
+    created_at: 2026-05-14T01:19:59.421345547Z
+  - rel_type: Parent
+    target_id: 019e2411-c7e5-7ec0-862a-f0f7ec57ea48
+    created_at: 2026-05-14T01:20:06.117494734Z
+  - rel_type: Parent
+    target_id: 019e2411-d89f-74c3-8963-75a56974c9ce
+    created_at: 2026-05-14T01:20:10.409966965Z
+  - rel_type: Parent
+    target_id: 019e2432-7aa7-7961-b6e1-48a5e4f66a52
+    created_at: 2026-05-14T01:55:49.091312066Z
+  comments:
+  - id: 019e2426-b7b8-7940-9f8c-ad6467054fab
+    author: joe
+    content: Initial scaffolding + all 4 child stories implemented and compile-tested. SSR binary builds, wasm hydrate target builds via cargo leptos, 7/7 unit tests pass, server starts and serves the chat page + handles /api/sessions, /api/sessions/:id/history (200/404), and /api/chat SSE. End-to-end with a real Anthropic key still needs a user smoke test in a browser.
+    created_at: 2026-05-14T01:42:57.720075129Z
+    modified_at: 2026-05-14T01:42:57.720075129Z
+- id: 019e2432-7aa7-7961-b6e1-48a5e4f66a52
+  spec_id: STORY-15
+  agreed_id: STORY-15
+  title: Optional claude CLI backend (draws from Claude Code subscription)
+  description: |-
+    ## Goal
+    Add a second agent backend that shells out to the local `claude` CLI
+    with `-p --output-format stream-json`, as an alternative to the
+    direct Anthropic-API loop. Lets aida-chat run off a Claude Code
+    subscription when API credits aren't available.
+
+    ## Design
+    - New trait-free dispatch in `src/server/agent.rs`: matches on
+      `cfg.backend` and calls into `backends/anthropic.rs` or
+      `backends/claude_cli.rs`. Both backends speak the same
+      `AgentEvent` (TextDelta / ToolCall / Done / Error) so the SSE
+      layer doesn't change.
+    - Backend selection via `AIDA_CHAT_BACKEND=anthropic|claude-cli`.
+      Auto-default: if `claude` is on PATH, prefer claude-cli; else
+      require `ANTHROPIC_API_KEY` and use anthropic.
+    - Conversation continuity: pass `--session-id <uuid>` on the first
+      turn, `--resume <uuid>` on subsequent turns. Claude Code stores
+      its own conversation history under `~/.claude/projects/...`; our
+      `SessionStore.transcript` stays the source of truth for the UI.
+    - Scope: default Claude Code scope, `cwd = repo_root`. No
+      `--dangerously-skip-permissions`, no `--allowedTools` restriction.
+    - UI: small badge in the chat header showing which backend is
+      active (`anthropic-api` / `claude-cli`).
+
+    ## Acceptance
+    - With `AIDA_CHAT_BACKEND=claude-cli` set, the server starts even
+      without `ANTHROPIC_API_KEY`.
+    - A user message produces a streamed reply driven by the local
+      `claude` process.
+    - Restarting the server and reopening the page replays the previous
+      turns from `SessionStore.transcript` (Claude Code's own history
+      is lost on session-store eviction, but the visible transcript
+      survives the in-memory TTL).
+    - An error from `claude` (non-zero exit, stderr) surfaces to the
+      browser as `event: err` with a non-empty message.
+  status: Completed
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:55:48.519018503Z
+  modified_at: 2026-05-14T03:49:45.424968904Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
+    created_at: 2026-05-14T01:55:49.091312066Z
+  comments:
+  - id: 019e243b-1056-7480-9826-adeac5cb4a1c
+    author: joe
+    content: 'Implemented and smoke-tested end-to-end. `AIDA_CHAT_BACKEND=claude-cli cargo leptos serve`: /api/info returns {backend:claude-cli}; a chat turn streams tool badges + text deltas; turn 2 resumes turn 1 via --resume. Subprocess env strips ANTHROPIC_API_KEY so claude uses subscription auth, sidestepping the API-credit billing issue. Trade-off documented: under default Claude Code scope, the subprocess writes to its own ~/.claude/projects/.../memory/ — outside repo_root but normal Claude Code housekeeping.'
+    created_at: 2026-05-14T02:05:11.126242487Z
+    modified_at: 2026-05-14T02:05:11.126242487Z
+  - id: 019e249a-cd50-7832-a8fd-a3080adce0de
+    author: joe
+    content: 'Persistent claude subprocess per session implemented (LiveProcessRegistry + per-session actor in claude_cli.rs). claude is spawned once and fed user messages over stdin via --input-format stream-json. Pre-warm on POST /api/sessions amortizes spawn cost against user-typing time. Measured: turn 1 cold 4.25s -> with pre-warm 2.68s; warm turns 2.0-2.4s. Continuity verified via stash-and-recall test.'
+    created_at: 2026-05-14T03:49:45.424968904Z
+    modified_at: 2026-05-14T03:49:45.424968904Z
+- id: 019e2411-d89f-74c3-8963-75a56974c9ce
+  spec_id: STORY-5
+  agreed_id: STORY-5
+  title: Per-user session manager with pluggable store
+  description: |-
+    A `SessionStore` trait abstracts how conversations are stored. `InMemorySessions` keyed by UUID is the only implementation for now. Each session holds the full message history (user/assistant/tool_use/tool_result). A background task evicts sessions idle > 1 hour.
+
+    ## Acceptance
+    - New session on `POST /api/sessions` returns a UUID.
+    - `POST /api/chat?session_id=X` with a message body streams the agent reply over SSE and persists user+assistant turns to the session.
+    - `GET /api/sessions/:id/history` returns the message list (for page reload).
+    - Unknown session id returns 404 (not 500).
+    - Trait shape lets a future Postgres-backed implementation drop in without changing the agent or HTTP layer.
+  status: InProgress
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:20:09.887011301Z
+  modified_at: 2026-05-14T01:42:55.715098642Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
+    created_at: 2026-05-14T01:20:10.409966965Z
+- id: 019e242d-32da-7a31-9af2-950e26f1b776
+  spec_id: STORY-14
+  agreed_id: STORY-14
+  title: 'Tool-call inspector: click a badge to see full request/response'
+  description: |-
+    ## Acceptance
+    - Tool badges in the UI are clickable.
+    - Clicking expands a panel showing the tool's full input JSON, full output text, and timing.
+    - v0 only emits a short input preview; this story extends the SSE `tool` event payload and the SessionStore to preserve the full content.
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:50:02.458906292Z
+  modified_at: 2026-05-14T01:50:02.458906292Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e242c-c207-7270-89bc-80514bff4b3d
+    created_at: 2026-05-14T01:50:02.987234174Z
+- id: 019e2411-ada9-71b1-b537-16a0da90f143
+  spec_id: STORY-3
+  agreed_id: STORY-3
+  title: Streaming Anthropic agent loop in Rust
+  description: |-
+    Implement a small streaming agent loop against the Anthropic Messages API (`claude-sonnet-4-6` default, configurable). Uses reqwest with `stream=true`. Parses SSE events from Anthropic, accumulates tool_use blocks, dispatches to scoped tools, appends tool_result, and re-enters the API. Emits an internal event stream (text delta, tool_call, tool_result, done, error) that the HTTP layer can forward to the browser as SSE.
+
+    ## Acceptance
+    - Multi-turn tool use works: the model can call a tool, see the result, call another tool, then produce a final answer.
+    - Streaming: text deltas are forwarded to the caller as they arrive, not buffered.
+    - `ANTHROPIC_API_KEY` is required at startup; missing key produces a clear error, not a runtime panic on first chat.
+    - A bounded `max_tool_iterations` (e.g., 10) prevents runaway loops.
+    - Loop exits cleanly when the model returns `stop_reason=end_turn` with no pending tool_use.
+  status: InProgress
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:19:58.889904404Z
+  modified_at: 2026-05-14T01:42:53.283657789Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
+    created_at: 2026-05-14T01:19:59.421345547Z
+- id: 019e242d-00ed-7070-9dc2-a5531c525c65
+  spec_id: STORY-9
+  agreed_id: STORY-9
+  title: Auth in front of /api and the chat page
+  description: |-
+    ## Acceptance
+    - Unauthenticated requests to `/` and `/api/*` are redirected/refused.
+    - Sessions in `SessionStore` are keyed by user_id, not just UUID.
+    - A user can only fetch / chat with sessions they own (404 otherwise).
+    - Auth provider is pluggable; v1 may ship with a single concrete impl (TBD).
+  status: Draft
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:49.677539718Z
+  modified_at: 2026-05-14T01:49:49.677539718Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e242c-c207-7270-89bc-80514bff4b3d
+    created_at: 2026-05-14T01:49:50.244097726Z
+- id: 019e2411-96cb-7e80-b3f9-c668d2fab8d4
+  spec_id: STORY-2
+  agreed_id: STORY-2
+  title: Leptos+Axum SSR app shell with streaming chat view
+  description: |-
+    Bootstrap a `cargo leptos` (start-axum template) project. Single chat view: header, scrollable message list, input box at the bottom. Streams assistant text via SSE; "New chat" button starts a fresh session. Session id persisted in localStorage.
+
+    ## Acceptance
+    - `cargo leptos serve` builds and serves on the registered port (8091).
+    - The browser maintains a session id across page reloads.
+    - Assistant replies render token-by-token (visible streaming, not whole-message on completion).
+    - The UI degrades gracefully when the SSE connection drops mid-stream (shows an error, doesn't hang).
+  status: InProgress
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:19:53.035992577Z
+  modified_at: 2026-05-14T01:42:52.369417688Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
+    created_at: 2026-05-14T01:19:53.576046955Z
+- id: 019e242d-0aeb-7250-aece-eaf082a180b6
+  spec_id: STORY-10
+  agreed_id: STORY-10
+  title: Persistent SessionStore implementation
+  description: |-
+    ## Acceptance
+    - A second `SessionStore` impl (Postgres or sqlx-sqlite) is added behind the existing trait.
+    - Conversations survive an `aida-chat` server restart.
+    - The agent and HTTP layers compile unchanged when switching implementations.
+    - An eviction policy is configurable (idle TTL, hard age cap, max-per-user).
+  status: Draft
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:52.235347210Z
+  modified_at: 2026-05-14T01:49:52.235347210Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e242c-c207-7270-89bc-80514bff4b3d
+    created_at: 2026-05-14T01:49:52.835313565Z
+- id: 019e242d-1e5a-7622-aa8e-beda8aebb00a
+  spec_id: STORY-12
+  agreed_id: STORY-12
+  title: Per-user rate limits + tool-iteration caps
+  description: |-
+    ## Acceptance
+    - Per-session cap on tool-loop iterations (already there in v0; expose via config).
+    - Per-user cap on concurrent sessions.
+    - Per-user cap on Anthropic spend per hour / per day.
+    - Exceeding any cap returns a 429 with a clear `event: err` payload, not a hang.
+  status: Draft
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:57.210624571Z
+  modified_at: 2026-05-14T01:49:57.210624571Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e242c-c207-7270-89bc-80514bff4b3d
+    created_at: 2026-05-14T01:49:57.885743565Z
+- id: 019e2411-c7e5-7ec0-862a-f0f7ec57ea48
+  spec_id: STORY-4
+  agreed_id: STORY-4
+  title: 'Scoped tools: aida, fs, grep with path confinement'
+  description: |-
+    Implement the tool surface exposed to the agent. All file-path inputs go through one `resolve_within_repo(p)` helper that canonicalizes and rejects anything outside `repo_root` or inside `.git/`/`.aida-store/objects/` (we still expose AIDA data via the `aida_*` tools, not by reading the orphan worktree directly).
+
+    Tools:
+    - `aida_list`, `aida_show`, `aida_search`, `aida_history` — spawn `aida` subprocess with a fixed-arg allowlist. No shell, no arbitrary flags.
+    - `read_file(path)` — UTF-8 only, size cap (e.g., 256 KB), returns full file or a sliced range.
+    - `list_directory(path)` — names + types only.
+    - `grep_repo(pattern, path_glob?)` — ripgrep wrapper; if `rg` not installed, fall back to a Rust grep crate.
+
+    ## Acceptance
+    - Unit tests cover: `../` escape rejected, absolute path outside repo rejected, symlink escape rejected, `.git` access denied, unknown aida subcommand rejected.
+    - Each tool has a JSON schema published in the Anthropic `tools` array (name, description, `input_schema`).
+    - No tool can ever spawn a shell (`/bin/sh -c`); all subprocesses use `Command::new(..)` with explicit args.
+  status: InProgress
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:20:05.605451881Z
+  modified_at: 2026-05-14T01:42:54.810868403Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
+    created_at: 2026-05-14T01:20:06.117494734Z
+- id: 019e242d-1482-7941-92fb-f9dc327219b5
+  spec_id: STORY-11
+  agreed_id: STORY-11
+  title: Per-user API-key isolation / billing attribution
+  description: |-
+    ## Acceptance
+    - Either: each user supplies their own ANTHROPIC_API_KEY (stored encrypted server-side), OR
+    - All users share a server-wide key but token usage is attributed per user.
+    - A user's token spend is queryable.
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:54.690198320Z
+  modified_at: 2026-05-14T01:49:54.690198320Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e242c-c207-7270-89bc-80514bff4b3d
+    created_at: 2026-05-14T01:49:55.209181617Z
+- id: 019e242d-28be-7ae0-9718-eb506e5a9610
+  spec_id: STORY-13
+  agreed_id: STORY-13
+  title: Conversation export (markdown)
+  description: |-
+    ## Acceptance
+    - A button in the chat header downloads the current session as a `.md` file.
+    - The export includes user turns, assistant turns, and a collapsed "tools used" line per assistant turn.
+  status: Draft
+  priority: Low
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:59.870264643Z
+  modified_at: 2026-05-14T01:49:59.870264643Z
+  req_type: Story
+  relationships:
+  - rel_type: Child
+    target_id: 019e242c-c207-7270-89bc-80514bff4b3d
+    created_at: 2026-05-14T01:50:00.444679245Z
+- id: 019e242c-68e5-7d00-81bf-53fda289d415
+  spec_id: ADR-6
+  agreed_id: ADR-6
+  title: Use a custom Rust agent loop talking directly to the Anthropic Messages API
+  description: |-
+    ## Decision
+    The aida-chat backend implements its own streaming agent loop in Rust
+    against `https://api.anthropic.com/v1/messages`. It does **not** spawn
+    `claude` CLI subprocesses, and it does **not** use the Python or
+    TypeScript Claude Agent SDK as a sidecar.
+
+    ## Context
+    Three viable backends were on the table:
+    1. Custom Rust agent loop (chosen).
+    2. Spawn `claude` CLI subprocess per user, with cwd=repo and permission
+       settings restricting tools.
+    3. Run a Python/TS Claude Agent SDK process as a sidecar; Leptos backend
+       proxies to it.
+
+    ## Rationale
+    - The user requirement was "limit what the Claude session can query to
+      just this repo and the aida-store." With a custom loop, the *set of
+      tools we publish* is the *set of things the model can do* — scoping
+      falls out naturally rather than being enforced by configuring a
+      third-party agent's permission system.
+    - Pure Rust binary — no Node.js or Python runtime needed on the server.
+    - Streaming + tool dispatch in ~550 lines (`src/server/agent.rs`),
+      small enough to audit.
+    - No subprocess lifecycle to manage per user.
+
+    ## Consequences
+    - We own the SSE parser for Anthropic's stream events.
+    - We can't piggyback on the Claude Agent SDK's automatic features
+      (memory, compaction, prompt caching helpers) — if we want them we
+      implement them.
+    - Tool implementations are Rust functions, easy to unit-test (see
+      the path-confinement tests in `src/server/tools/fs.rs`).
+
+    ## Related
+    - [[EPIC-1]] — the EPIC this decision underpins.
+    - [[STORY-3]] — the agent-loop implementation.
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:10.757476810Z
+  modified_at: 2026-05-14T01:49:10.757476810Z
+  req_type: Decision
+- id: 019e242c-9450-74b3-8ec6-46528d3a2dbc
+  spec_id: ADR-7
+  agreed_id: ADR-7
+  title: Expose a tool-call surface; do not pre-stuff requirements into the system prompt
+  description: |-
+    ## Decision
+    The agent's system prompt is short and tells the model *what tools
+    exist*. The model calls tools (`aida_list`, `aida_show`, `read_file`,
+    `grep_repo`, etc.) on demand to fetch what it needs. We do **not**
+    pre-stuff the full requirements summary or repo contents into the
+    system prompt.
+
+    ## Context
+    The existing `aida-server/src/chat.rs` (in the sibling `aida` repo)
+    takes the opposite approach: it builds `project_context +
+    requirements_summary + git_context` and inlines all of it into the
+    system prompt at request time. That's why aida-server's chat works
+    without tool use.
+
+    When we considered reusing aida-server as the backend for this UI, we
+    explicitly chose to go in a different direction.
+
+    ## Rationale
+    - **Scales with repo size and requirement count.** A pre-stuffed
+      prompt grows linearly with project content; a tool-call surface
+      stays small regardless.
+    - **Always fresh.** Tool calls hit live state at request time. A
+      pre-stuffed prompt goes stale within a single conversation if the
+      user (or another agent) edits requirements mid-session.
+    - **Cheaper.** No tokens spent shipping unread context. The model
+      reads what it needs, when it needs it.
+    - **Auditable.** The UI surfaces every tool call as a badge — the
+      user can see exactly which files / requirements / searches the
+      agent looked at to answer their question.
+
+    ## Consequences
+    - More round-trips per user turn (one Anthropic call + tool exec +
+      another Anthropic call, vs. a single beefy prompt-stuffed call).
+    - The agent loop has to be implemented end-to-end (covered by the
+      [[decision-custom-rust-agent-loop]] decision).
+    - Small projects with a tiny requirements set might actually be
+      *slower* than the stuffed-prompt approach. Acceptable trade-off
+      given the target use case is larger projects.
+
+    ## Related
+    - [[EPIC-1]], [[STORY-3]], [[STORY-4]]
+    - Considered-and-rejected: pivot to building only a Leptos client
+      for aida-server's existing `/api/v2/chat`. Rejected because the
+      static-context approach doesn't fit "ask anything about the repo".
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:49:21.872453687Z
+  modified_at: 2026-05-14T01:49:21.872453687Z
+  req_type: Decision
+- id: 019e2405-8e98-7102-93a0-aeb0118379bf
+  spec_id: META-002
+  title: Evaluate Requirement
+  description: |-
+    Template for evaluating requirement quality. Placeholders: {global_context}, {project_context}, {req_context}, {related_context}, {additional_instructions}, {type_extra}
+
+    ---
+
+    You are an expert requirements analyst evaluating a software requirement for quality and completeness.
+
+    {global_context}
+    {project_context}
+
+    {req_context}
+
+    {related_context}
+    {additional_instructions}{type_extra}
+    ## Task
+    Evaluate this requirement and provide a structured assessment. Consider:
+    1. Clarity: Is the requirement clearly stated and unambiguous?
+    2. Completeness: Does it have sufficient detail for implementation?
+    3. Testability: Can this requirement be verified/tested?
+    4. Consistency: Does it align with related requirements?
+    5. Feasibility: Is it realistic and achievable?
+
+    ## Response Format
+    Respond ONLY with valid JSON in this exact format:
+    ```json
+    {
+      "quality_score": <1-10>,
+      "issues": [
+        {
+          "type": "<vague_language|missing_criteria|ambiguous|incomplete|inconsistent|untestable>",
+          "severity": "<low|medium|high>",
+          "text": "<description of the issue>",
+          "suggestion": "<how to fix it>"
+        }
+      ],
+      "strengths": ["<strength1>", "<strength2>"],
+      "suggested_improvements": {
+        "description": "<improved description text if needed, or null>",
+        "rationale": "<why this improvement helps>"
+      }
+    }
+    ```
+
+    Provide your evaluation now:
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:06:44.504292019Z
+  modified_at: 2026-05-14T01:06:44.504292019Z
+  req_type: Meta
+  meta_subtype: Prompt
+  relationships:
+  - rel_type: Parent
+    target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
+    created_at: 2026-05-14T01:06:44.504307319Z
+- id: 019e2405-8e98-7102-93a0-aec1c70a4791
+  spec_id: META-003
+  title: Find Duplicates
+  description: |-
+    Template for finding duplicate or overlapping requirements. Placeholders: {global_context}, {project_context}, {req_context}, {all_reqs}, {additional_instructions}
+
+    ---
+
+    You are an expert requirements analyst identifying potential duplicate or overlapping requirements.
+
+    {global_context}
+    {project_context}
+
+    {req_context}
+
+    {all_reqs}
+    {additional_instructions}
+    ## Task
+    Analyze the current requirement and compare it against all other requirements to find:
+    1. Exact duplicates (same functionality described differently)
+    2. Partial overlaps (requirements that cover similar ground)
+    3. Potential conflicts (requirements that contradict each other)
+
+    Only report requirements with similarity > 0.5 (50%).
+
+    ## Response Format
+    Respond ONLY with valid JSON in this exact format:
+    ```json
+    {
+      "potential_duplicates": [
+        {
+          "spec_id": "<SPEC-ID of similar requirement>",
+          "similarity": <0.0-1.0>,
+          "reason": "<why these are similar>",
+          "recommendation": "<merge|link|keep_separate|review>"
+        }
+      ]
+    }
+    ```
+
+    If no duplicates found, return: {"potential_duplicates": []}
+
+    Provide your analysis now:
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:06:44.504312620Z
+  modified_at: 2026-05-14T01:06:44.504312620Z
+  req_type: Meta
+  meta_subtype: Prompt
+  relationships:
+  - rel_type: Parent
+    target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
+    created_at: 2026-05-14T01:06:44.504325355Z
+- id: 019e2405-8e98-7102-93a0-aef265e7fbdb
+  spec_id: META-006
+  title: Generate Children
+  description: |-
+    Template for generating child requirements. Placeholders: {global_context}, {project_context}, {req_context}, {existing_children}, {additional_instructions}, {type_extra}
+
+    ---
+
+    You are an expert requirements analyst decomposing a high-level requirement into specific, actionable child requirements.
+
+    {global_context}
+    {project_context}
+
+    {req_context}
+
+    {existing_children}
+    {additional_instructions}{type_extra}
+    ## Task
+    Break down this requirement into specific, actionable child requirements that together fulfill the parent requirement:
+
+    1. Each child should be independently implementable
+    2. Children should be specific and testable
+    3. Consider different aspects: functionality, UI, data, integration, error handling
+    4. Suggest appropriate requirement types for each child
+    5. Avoid duplicating existing children
+
+    ## Response Format
+    Respond ONLY with valid JSON in this exact format:
+    ```json
+    {
+      "suggested_children": [
+        {
+          "title": "<concise title>",
+          "description": "<detailed description with acceptance criteria>",
+          "type": "<Functional|NonFunctional|Task|Story>",
+          "priority": "<High|Medium|Low>",
+          "rationale": "<why this child requirement is needed>"
+        }
+      ]
+    }
+    ```
+
+    Provide your analysis now:
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:06:44.504334114Z
+  modified_at: 2026-05-14T01:06:44.504334114Z
+  req_type: Meta
+  meta_subtype: Prompt
+  relationships:
+  - rel_type: Parent
+    target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
+    created_at: 2026-05-14T01:06:44.504336752Z
+- id: 019e2405-8e98-7102-93a0-aead8d7127e0
+  spec_id: META-001
+  title: AI Prompts
+  description: Default AI prompt templates. Edit these to customize how AI analyzes and improves requirements.
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:06:44.504239593Z
+  modified_at: 2026-05-14T01:06:44.504239593Z
+  req_type: Meta
+  meta_subtype: Prompt
+  relationships:
+  - rel_type: Child
+    target_id: 019e2405-8e98-7102-93a0-aeb0118379bf
+    created_at: 2026-05-14T01:06:44.504307319Z
+  - rel_type: Child
+    target_id: 019e2405-8e98-7102-93a0-aec1c70a4791
+    created_at: 2026-05-14T01:06:44.504325355Z
+  - rel_type: Child
+    target_id: 019e2405-8e98-7102-93a0-aedbc893623f
+    created_at: 2026-05-14T01:06:44.504329262Z
+  - rel_type: Child
+    target_id: 019e2405-8e98-7102-93a0-aee6926c3c62
+    created_at: 2026-05-14T01:06:44.504333239Z
+  - rel_type: Child
+    target_id: 019e2405-8e98-7102-93a0-aef265e7fbdb
+    created_at: 2026-05-14T01:06:44.504336752Z
+- id: 019e2405-8e98-7102-93a0-aee6926c3c62
+  spec_id: META-005
+  title: Improve Description
+  description: |-
+    Template for improving requirement descriptions. Placeholders: {global_context}, {project_context}, {req_context}, {related_context}, {examples}, {additional_instructions}, {type_extra}, {req_type}
+
+    ---
+
+    You are an expert requirements analyst improving a requirement's description for clarity and completeness.
+
+    {global_context}
+    {project_context}
+
+    {req_context}
+
+    {related_context}
+
+    {examples}
+    {additional_instructions}{type_extra}
+    ## Task
+    Improve the requirement's description to be:
+    1. Clear and unambiguous
+    2. Complete with acceptance criteria where appropriate
+    3. Testable/verifiable
+    4. Consistent with the requirement type ({req_type})
+    5. Professional and well-structured
+
+    Do NOT change the meaning or scope of the requirement.
+
+    ## Response Format
+    Respond ONLY with valid JSON in this exact format:
+    ```json
+    {
+      "improved_description": "<the improved description text>",
+      "changes_made": ["<change1>", "<change2>"],
+      "rationale": "<why these improvements help>"
+    }
+    ```
+
+    Provide your improved version now:
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:06:44.504330122Z
+  modified_at: 2026-05-14T01:06:44.504330122Z
+  req_type: Meta
+  meta_subtype: Prompt
+  relationships:
+  - rel_type: Parent
+    target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
+    created_at: 2026-05-14T01:06:44.504333239Z
+- id: 019e2405-8e98-7102-93a0-aedbc893623f
+  spec_id: META-004
+  title: Suggest Relationships
+  description: |-
+    Template for suggesting missing relationships. Placeholders: {global_context}, {project_context}, {req_context}, {all_reqs}, {rel_types}, {additional_instructions}
+
+    ---
+
+    You are an expert requirements analyst identifying missing relationships between requirements.
+
+    {global_context}
+    {project_context}
+
+    {req_context}
+
+    {all_reqs}
+
+    ## Available Relationship Types
+    - {rel_types}
+    {additional_instructions}
+    ## Task
+    Analyze the current requirement and suggest relationships that should exist but don't:
+    1. Dependencies (what must be done first)
+    2. Parent/child relationships (decomposition)
+    3. Verification relationships (what tests/validates this)
+    4. References (related but not dependent)
+
+    Only suggest relationships with confidence > 0.7 (70%).
+
+    ## Response Format
+    Respond ONLY with valid JSON in this exact format:
+    ```json
+    {
+      "suggested_relationships": [
+        {
+          "rel_type": "<relationship type>",
+          "target_spec_id": "<SPEC-ID of target requirement>",
+          "confidence": <0.0-1.0>,
+          "rationale": "<why this relationship should exist>"
+        }
+      ]
+    }
+    ```
+
+    If no relationships to suggest, return: {"suggested_relationships": []}
+
+    Provide your analysis now:
+  status: Draft
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-14T01:06:44.504326625Z
+  modified_at: 2026-05-14T01:06:44.504326625Z
+  req_type: Meta
+  meta_subtype: Prompt
+  relationships:
+  - rel_type: Parent
+    target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
+    created_at: 2026-05-14T01:06:44.504329262Z
+id_config:
+  format: SingleLevel
+  numbering: Global
+  digits: 3
+  requirement_types:
+  - name: Functional
+    prefix: FR
+    description: Functional requirements
+  - name: Non-Functional
+    prefix: NFR
+    description: Non-functional requirements (performance, security, etc.)
+  - name: System
+    prefix: SR
+    description: System-level requirements
+  - name: User
+    prefix: UR
+    description: User story requirements
+  - name: Change Request
+    prefix: CR
+    description: Change requests for modifications to existing functionality
+  - name: Bug
+    prefix: BUG
+    description: Bug reports and defects
+  - name: Epic
+    prefix: EPIC
+    description: Large features spanning multiple stories
+  - name: Story
+    prefix: STORY
+    description: User stories for agile development
+  - name: Task
+    prefix: TASK
+    description: Individual work items
+  - name: Spike
+    prefix: SPIKE
+    description: Research and investigation tasks
+  - name: Sprint
+    prefix: SPRINT
+    description: Sprint planning containers
+  - name: Folder
+    prefix: FOLDER
+    description: Organizational folders
+  - name: Meta
+    prefix: META
+    description: Database configuration and templates
+features: []
+next_feature_number: 1
+next_spec_number: 7
+prefix_counters: {}
+relationship_definitions:
+- name: parent
+  display_name: Parent
+  description: Hierarchical parent requirement
+  inverse: child
+  symmetric: false
+  cardinality: OneToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: child
+  display_name: Child
+  description: Hierarchical child requirement
+  inverse: parent
+  symmetric: false
+  cardinality: ManyToOne
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: verifies
+  display_name: Verifies
+  description: Test or verification relationship
+  inverse: verified_by
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: verified_by
+  display_name: Verified By
+  description: Verified by a test requirement
+  inverse: verifies
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: duplicate
+  display_name: Duplicate
+  description: Marks requirements as duplicates
+  inverse: null
+  symmetric: true
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: references
+  display_name: References
+  description: General reference link
+  inverse: null
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: depends_on
+  display_name: Depends On
+  description: Dependency relationship
+  inverse: dependency_of
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: dependency_of
+  display_name: Dependency Of
+  description: Inverse dependency relationship
+  inverse: depends_on
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: implements
+  display_name: Implements
+  description: Implementation relationship
+  inverse: implemented_by
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: implemented_by
+  display_name: Implemented By
+  description: Inverse implementation relationship
+  inverse: implements
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: null
+  icon: null
+- name: created_by
+  display_name: Created By
+  description: User who created the requirement
+  inverse: null
+  symmetric: false
+  cardinality: ManyToOne
+  source_types: []
+  target_types: []
+  built_in: true
+  color: '#4a9eff'
+  icon: null
+- name: assigned_to
+  display_name: Assigned To
+  description: User assigned to work on this requirement
+  inverse: null
+  symmetric: false
+  cardinality: ManyToOne
+  source_types: []
+  target_types: []
+  built_in: true
+  color: '#22c55e'
+  icon: null
+- name: tested_by
+  display_name: Tested By
+  description: User who tested/verified the requirement
+  inverse: null
+  symmetric: false
+  cardinality: ManyToMany
+  source_types: []
+  target_types: []
+  built_in: true
+  color: '#f59e0b'
+  icon: null
+- name: closed_by
+  display_name: Closed By
+  description: User who closed/completed the requirement
+  inverse: null
+  symmetric: false
+  cardinality: ManyToOne
+  source_types: []
+  target_types: []
+  built_in: true
+  color: '#ef4444'
+  icon: null
+- name: sprint_assignment
+  display_name: Assigned to Sprint
+  description: Assigns a requirement to a Sprint for work planning
+  inverse: sprint_contains
+  symmetric: false
+  cardinality: ManyToOne
+  source_types: []
+  target_types:
+  - Sprint
+  built_in: true
+  color: '#7c3aed'
+  icon: null
+- name: sprint_contains
+  display_name: Sprint Contains
+  description: Items assigned to this Sprint
+  inverse: sprint_assignment
+  symmetric: false
+  cardinality: OneToMany
+  source_types:
+  - Sprint
+  target_types: []
+  built_in: true
+  color: '#7c3aed'
+  icon: null
+reaction_definitions:
+- name: resolved
+  emoji: ✅
+  label: Resolved
+  description: Mark comment as resolved/addressed
+  built_in: true
+- name: rejected
+  emoji: ❌
+  label: Rejected
+  description: Mark comment as rejected/declined
+  built_in: true
+- name: thumbs_up
+  emoji: 👍
+  label: Thumbs Up
+  description: Agree or approve
+  built_in: true
+- name: thumbs_down
+  emoji: 👎
+  label: Thumbs Down
+  description: Disagree or disapprove
+  built_in: true
+- name: question
+  emoji: ❓
+  label: Question
+  description: Needs clarification
+  built_in: true
+- name: important
+  emoji: ⚠️
+  label: Important
+  description: Mark as important/attention needed
+  built_in: true
+meta_counters: {}
+type_definitions:
+- name: Functional
+  display_name: Functional
+  description: Functional requirements describing system behavior
+  prefix: FR
+  built_in: true
+  stateless: false
+- name: NonFunctional
+  display_name: Non-Functional
+  description: Non-functional requirements (performance, security, etc.)
+  prefix: NFR
+  built_in: true
+  stateless: false
+- name: System
+  display_name: System
+  description: System-level requirements
+  prefix: SYS
+  built_in: true
+  stateless: false
+- name: User
+  display_name: User Story
+  description: User stories and user requirements
+  prefix: US
+  built_in: true
+  stateless: false
+- name: ChangeRequest
+  display_name: Change Request
+  description: Change requests for existing functionality
+  prefix: CR
+  statuses:
+  - Draft
+  - Submitted
+  - Under Review
+  - Approved
+  - Rejected
+  - In Progress
+  - Implemented
+  - Verified
+  - Closed
+  custom_fields:
+  - name: impact
+    label: Impact Level
+    field_type: select
+    required: false
+    options:
+    - Low
+    - Medium
+    - High
+    - Critical
+    description: Impact of this change on the system
+    order: 1
+  - name: requested_by
+    label: Requested By
+    field_type: user
+    required: false
+    description: User who requested this change
+    order: 2
+  - name: target_release
+    label: Target Release
+    field_type: text
+    required: false
+    description: Target release version for this change
+    order: 3
+  - name: justification
+    label: Justification
+    field_type: text
+    required: true
+    description: Business justification for the change
+    order: 4
+  built_in: true
+  color: '#9333ea'
+  stateless: false
+- name: Bug
+  display_name: Bug
+  description: Bug reports and defects
+  prefix: BUG
+  statuses:
+  - New
+  - Confirmed
+  - In Progress
+  - Fixed
+  - Verified
+  - Closed
+  - Won't Fix
+  custom_fields:
+  - name: severity
+    label: Severity
+    field_type: select
+    required: false
+    options:
+    - Critical
+    - Major
+    - Minor
+    - Trivial
+    description: Severity of the bug
+    order: 1
+  - name: steps_to_reproduce
+    label: Steps to Reproduce
+    field_type: text
+    required: false
+    description: Steps to reproduce the bug
+    order: 2
+  - name: expected_behavior
+    label: Expected Behavior
+    field_type: text
+    required: false
+    description: What should happen
+    order: 3
+  - name: actual_behavior
+    label: Actual Behavior
+    field_type: text
+    required: false
+    description: What actually happens
+    order: 4
+  built_in: true
+  color: '#dc2626'
+  stateless: false
+- name: Epic
+  display_name: Epic
+  description: Large feature or initiative spanning multiple stories
+  prefix: EPIC
+  statuses:
+  - Draft
+  - Ready
+  - In Progress
+  - Done
+  custom_fields:
+  - name: business_value
+    label: Business Value
+    field_type: text
+    required: false
+    description: Business value or benefit of this epic
+    order: 1
+  - name: target_release
+    label: Target Release
+    field_type: text
+    required: false
+    description: Target release or milestone
+    order: 2
+  - name: story_points
+    label: Story Points
+    field_type: number
+    required: false
+    description: Estimated story points
+    order: 3
+  built_in: true
+  color: '#7c3aed'
+  stateless: false
+- name: Story
+  display_name: Story
+  description: User story for agile development
+  prefix: STORY
+  statuses:
+  - Draft
+  - Ready
+  - In Progress
+  - In Review
+  - Done
+  custom_fields:
+  - name: acceptance_criteria
+    label: Acceptance Criteria
+    field_type: textarea
+    required: false
+    description: Criteria that must be met for the story to be complete
+    order: 1
+  - name: story_points
+    label: Story Points
+    field_type: number
+    required: false
+    description: Estimated story points
+    order: 2
+  - name: assignee
+    label: Assignee
+    field_type: user
+    required: false
+    description: Person assigned to this story
+    order: 3
+  built_in: true
+  color: '#10b981'
+  stateless: false
+- name: Task
+  display_name: Task
+  description: Implementation task or work item
+  prefix: TASK
+  statuses:
+  - To Do
+  - In Progress
+  - In Review
+  - Done
+  custom_fields:
+  - name: estimate_hours
+    label: Estimate (hours)
+    field_type: number
+    required: false
+    description: Estimated hours to complete
+    order: 1
+  - name: assignee
+    label: Assignee
+    field_type: user
+    required: false
+    description: Person assigned to this task
+    order: 2
+  built_in: true
+  color: '#0891b2'
+  stateless: false
+- name: Spike
+  display_name: Spike
+  description: Research or investigation task with time-boxed exploration
+  prefix: SPIKE
+  statuses:
+  - Planned
+  - In Progress
+  - Completed
+  custom_fields:
+  - name: research_question
+    label: Research Question
+    field_type: text
+    required: true
+    description: The question or problem to investigate
+    order: 1
+  - name: time_box
+    label: Time Box
+    field_type: text
+    required: false
+    description: Time allocated for investigation (e.g., '2 days')
+    order: 2
+  - name: findings
+    label: Findings
+    field_type: textarea
+    required: false
+    description: Results and conclusions from the investigation
+    order: 3
+  - name: recommendation
+    label: Recommendation
+    field_type: text
+    required: false
+    description: Recommended next steps based on findings
+    order: 4
+  built_in: true
+  color: '#ca8a04'
+  stateless: false
+- name: Sprint
+  display_name: Sprint
+  description: Time-boxed iteration for work planning
+  prefix: SPRINT
+  statuses:
+  - Draft
+  - In Progress
+  - Completed
+  - Archived
+  custom_fields:
+  - name: sprint_number
+    label: Sprint Number
+    field_type: number
+    required: false
+    description: Sequential sprint number
+    order: 1
+  - name: start_date
+    label: Start Date
+    field_type: text
+    required: false
+    description: Sprint start date (YYYY-MM-DD)
+    order: 2
+  - name: end_date
+    label: End Date
+    field_type: text
+    required: false
+    description: Sprint end date (YYYY-MM-DD)
+    order: 3
+  - name: sprint_goal
+    label: Sprint Goal
+    field_type: text
+    required: false
+    description: Goal or theme for this sprint
+    order: 4
+  - name: velocity
+    label: Planned Velocity
+    field_type: number
+    required: false
+    description: Planned story points for this sprint
+    order: 5
+  built_in: true
+  color: '#7c3aed'
+  stateless: false
+- name: Folder
+  display_name: Folder
+  description: Organizational container for grouping related requirements
+  prefix: FLD
+  built_in: true
+  color: '#6b7280'
+  stateless: true
+- name: Meta
+  display_name: Meta
+  description: Database configuration, prompts, skills, and templates
+  prefix: META
+  built_in: true
+  color: '#8b5cf6'
+  stateless: true
+allowed_prefixes: []
+restrict_prefixes: false
