@@ -1,0 +1,17 @@
+id: 019e58cf-6508-7a52-82e5-cb64e23603cd
+spec_id: STORY-17
+agreed_id: STORY-17
+title: Substrate-grounded context assembly with source attribution
+description: ''
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T07:07:27.368395128Z
+modified_at: 2026-05-24T07:07:27.368395128Z
+req_type: Story
+tags:
+- context-assembly
+- parent:EPIC-16
+- source-attribution
+- substrate-grounded
