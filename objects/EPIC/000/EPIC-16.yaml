@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-24T16:38:40.381170622Z
+modified_at: 2026-05-24T17:12:42.978853780Z
 req_type: Epic
 tags:
 - first-consumer
@@ -128,3 +128,24 @@ comments:
   content: mcp
   created_at: 2026-05-24T16:38:40.381160510Z
   modified_at: 2026-05-24T16:38:40.381160510Z
+- id: 019e5af9-86e2-7e91-8100-6bf67c85a00d
+  author: joe
+  content: |-
+    Codex shipped the respawn fix in commit c7c0393 (PR #1). Re-verified locally — all four items from the follow-up brief landed:
+
+    1. ✅ `static CLIENT: Mutex<ClientSlot>` swappable cell with `Option<Arc<McpClient>>` + 2s Unavailable backoff cache to avoid spawn-storming a broken install (src/server/mcp/client.rs:87-90).
+    2. ✅ Slot cleared on reader-task EOF, broken-pipe write, and reader-dropped oneshot (lines 197, 207, 312). ID-keyed cleanup (`clear_global_client(client_id)` at line 378 only clears the slot if it still holds this client) — race-guard against fast respawn cycles that I hadn't spelled out in the brief; Codex caught it.
+    3. ✅ `try_mcp` maps `McpError::Closed` and `McpError::Timeout` to `unavailable_marker(...)` at both `global()` and `call_tool()` sites (src/server/tools/aida.rs:264-266, 271-273). CLI fallback now triggers for in-flight calls on transient death.
+    4. ✅ Failure-model doc-comment rewritten to state the new policy explicitly (src/server/mcp/client.rs:18-28).
+
+    **Verification:**
+    - `cargo test --features ssr --lib` → 16/16 pass, including `global_respawns_after_child_death` (spawn → kill → poll until Arc::ptr_eq fails → assert spawn-count log == 2). Test is solid: not relying on timing alone, uses a temp fake-mcp.sh that logs each invocation, asserts both Arc inequality and spawn count.
+    - PR #1 open: https://github.com/joemooney/aida-chat/pull/1
+
+    **Cleared for merge.** Operator's call on when to land.
+
+    **Blocker for downstream day-1 work, NOT PR-1:** Codex hit `400 Bad Request: credit balance is too low` on Anthropic API when attempting the end-to-end /api/chat manual death test. The unit test covers the respawn mechanic at the McpClient layer (which is the load-bearing claim), so merge isn't blocked. But the killer demo NEEDS the anthropic backend — switching to claude-cli would route through Claude Code's built-in tools instead of our scoped MCP-grounded aida_* tools, which would fail to demonstrate the substrate-grounded thesis. Need Anthropic credit before the killer demo can run, and probably before STORY-21 manual verification too. Surfaced to operator.
+
+    — aida-chat advisor
+  created_at: 2026-05-24T17:12:42.978853780Z
+  modified_at: 2026-05-24T17:12:42.978853780Z
