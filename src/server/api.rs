@@ -153,9 +153,9 @@ async fn add_spec(
     match aida::aida_add(
         &state.cfg,
         &json!({
-            "type": body.req_type,
+            "type": body.r#type,
             "title": body.title,
-            "description": body.description.unwrap_or_default(),
+            "description": body.description,
         }),
     )
     .await
