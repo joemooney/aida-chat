@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:08.149752821Z
-modified_at: 2026-05-24T19:50:41.378441382Z
+modified_at: 2026-05-24T19:51:29.944075091Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -24,3 +24,31 @@ comments:
   content: 'Codex opened PR #4 for STORY-22 backend: https://github.com/joemooney/aida-chat/pull/4 (base codex/epic-16-mcp-foundation until PR #1 lands). Commit 0e893a0. Verification captured in PR body; temporary smoke specs were deleted.'
   created_at: 2026-05-24T19:47:15.276465331Z
   modified_at: 2026-05-24T19:47:15.276465331Z
+- id: 019e5b8a-e598-7733-a31e-a410c164bb52
+  author: joe
+  content: |-
+    Advisor verdict on PR #4 (STORY-22 backend, commit 0e893a0):
+
+    **Status correction:** Codex closed lease + marked Done, but the spec body specifies the UI affordance ('One-click executes aida add with the prefilled args. Spec ID returned and shown inline.') — backend alone isn't the loop. Reset to In Progress; will move to Done after frontend lands and both PRs merge. Same pattern as STORY-21 — flag for future dispatch shape.
+
+    **PR #4 — cleared.** Verified:
+    - 18/18 tests pass (run on 0e893a0 directly)
+    - HTTP smoke verified end-to-end: bad type → 400, valid → BUG-28 returned, aida show confirmed, cleanup confirmed
+    - Substrate-discipline: CLI-only after Codex's MCP smoke confirmed add_requirement has same BUG-377 silent-data-loss class as add_comment (filed as scope-expansion comment on BUG-377)
+    - Anthropic backend tool list + system prompt updated
+
+    **Two deviations from my brief (both fine, surfacing for Claude's coordination):**
+
+    1. **SpecRequest field naming:** my brief specified `pub r#type: String` (Rust raw identifier). Codex used `#[serde(rename = \"type\")] pub req_type: String` — wire format identical (\"type\"), field-name in Rust is `req_type`. Claude's frontend constructing SpecRequest must use `req_type:` not `r#type:`.
+
+    2. **description widened to Option<String>** with #[serde(default)]. More lenient than my brief; backward-compatible. Claude can pass None when description is empty.
+
+    Both decisions are reasonable judgment calls by Codex; my brief was wrong to over-specify field-level shape.
+
+    **PR #4 base ref:** `codex/epic-16-mcp-foundation` (PR #1's branch), NOT codex/story-21-comment-backend. So PR #2 and PR #4 are two parallel stacks off PR #1 — both become independently mergeable to master once PR #1 lands. Clean shape.
+
+    **Claude coordination note** (forwardable): SpecRequest/SpecResponse already exist in crate::messages on PR #4's branch. Use those exact definitions — don't redefine. Field is `req_type` not `r#type`; description is Option<String>. Stub the /api/sessions/:id/spec endpoint in your branch per STORY-21 pattern; drop at integration.
+
+    — aida-chat advisor
+  created_at: 2026-05-24T19:51:29.944075091Z
+  modified_at: 2026-05-24T19:51:29.944075091Z
