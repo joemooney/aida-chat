@@ -3,12 +3,12 @@ spec_id: STORY-19
 agreed_id: STORY-19
 title: MCP-first integration contract; CLI + file fallback
 description: ''
-status: Approved
+status: Completed
 priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:07:28.756084583Z
-modified_at: 2026-05-24T07:07:28.756084583Z
+modified_at: 2026-05-24T20:43:03.965245158Z
 req_type: Story
 tags:
 - integration-contract
