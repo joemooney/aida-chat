@@ -1,0 +1,16 @@
+id: 019e58cf-682f-78a2-9e7d-4bde13de7be7
+spec_id: STORY-18
+agreed_id: STORY-18
+title: Five virtuous-loop capture verbs (chat → comment/task/memory/plan/trace-finding)
+description: ''
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T07:07:28.175249307Z
+modified_at: 2026-05-24T07:07:28.175249307Z
+req_type: Story
+tags:
+- capture-verbs
+- feedback-loop
+- parent:EPIC-16
