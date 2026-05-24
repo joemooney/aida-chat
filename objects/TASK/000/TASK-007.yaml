@@ -1,0 +1,11 @@
+id: 019e5bbf-7087-79d3-8699-fd797bea0f7f
+spec_id: TASK-007
+title: mcp_smoke temporary add_requirement 2838361
+description: temporary MCP add_requirement smoke; delete me
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T20:48:53.383324703Z
+modified_at: 2026-05-24T20:48:53.383324703Z
+req_type: Task
