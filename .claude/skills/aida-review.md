@@ -6,7 +6,7 @@ allowed-tools:
   - Bash
   - Read
 ---
-<!-- AIDA Generated: v2.0.0 | checksum:26bb06cc | DO NOT EDIT DIRECTLY -->
+<!-- AIDA Generated: v2.0.0 | checksum:efc329d1 | DO NOT EDIT DIRECTLY -->
 <!-- To customize: copy this file and modify the copy -->
 
 
@@ -59,7 +59,7 @@ A headless `--no-human` drain (`AIDA_HEADLESS=1`) is the stronger mode and
 overrides `--zen` — see the *Headless mode contract* below for the full
 ordering invariant and the AskUserQuestion ban. An un-annotated prompt
 defaults to `design-fork` (pause-safe). Author guidance:
-`docs/aida-discipline/skill-prompt-kinds.md`. trace:STORY-287
+`docs/aida/discipline/skill-prompt-kinds.md`. trace:STORY-287
 
 ## Headless mode contract (`AIDA_HEADLESS=1`) — trace:BUG-280
 
@@ -103,6 +103,159 @@ ordering explicit so the model cannot drift past it.
 
 The interactive workflow still walks steps 1–11 in order; this contract
 only takes effect when `AIDA_HEADLESS=1`.
+
+## Fix-forward policy — trace:TASK-333 | ai:claude
+
+The reviewer may **fix-forward** — push a small corrective commit on the PR's
+branch instead of returning RequestChanges — only under a tightly scoped,
+doc-only allowance. Two risks shape the policy:
+
+1. **CI desync.** A commit pushed after phase-2 CI has finished means the
+   merged HEAD differs from what CI validated. For a logic change this is
+   unsafe; for a doc/comment change it is harmless (a doc edit cannot change
+   build/test behavior). The reviewer must still re-verify
+   `mergeStateStatus: CLEAN` on the fix-forward commit before Approving — see
+   the procedure below.
+2. **Self-grading.** The reviewer writes the fix-forward commit and then
+   approves it. The implementer/reviewer separation that the workflow rests
+   on is bent. A `kind:reviewer-fix-forward` finding (STORY-285) restores an
+   independent checkpoint after the fact, without halting the drain — the
+   advisor sees and grades the reviewer's self-applied commit post-hoc.
+
+The policy applies in **both interactive and headless** review. The self-
+grading risk is mode-independent; the finding files in either mode.
+
+### When fix-forward is PERMITTED — doc-only, no behavior delta
+
+A change qualifies *only* when it **cannot affect build or test behavior**.
+Concrete allowances:
+
+- Documentation prose: `README.md`, files under `docs/`, the prose body of a
+  markdown skill template
+- Code comments and doc-comments (`//`, `///`, `#`, `"""`) — the prose, not
+  the symbol they describe
+- Output-example accuracy: a code fence in docs / a skill / a comment that
+  shows the literal output of a command and the actual output has drifted
+- Typos in any of the above
+- `cargo fmt` whitespace drift — purely formatting, no semantic delta
+
+### When fix-forward is FORBIDDEN — return RequestChanges instead
+
+Any change that *can* affect build or test behavior — no exceptions, no
+judgment calls. The discriminator is **"would re-running `cargo check` /
+`cargo test` reach a different result?"** If the answer is yes or maybe, it
+is forbidden. Concrete categories:
+
+- Function bodies, signatures, attributes (`#[cfg(...)]`, `#[test]`,
+  `#[derive(...)]`, `#[allow(...)]`)
+- Type, struct, enum, or trait definitions — even renaming a field touches
+  consumers
+- Dependency additions / removals / version bumps (`Cargo.toml`,
+  `Cargo.lock`, `package.json`, etc.)
+- Control flow, error handling, return types, or anything inside `unsafe`
+- Tests (adding, removing, renaming, or changing the body) — a test IS
+  executable behavior; its outcome determines whether CI passes
+- Build scripts (`build.rs`), `Makefile` recipes, CI workflow YAML, git
+  hooks, shell scripts the project executes
+- Runtime configuration the binary reads (`.aida/config.toml` schema,
+  recognized env-var names)
+- The bash blocks inside a skill template — skills execute them, so they
+  are behavior, not prose
+- An error message string literal — string changes break any test that
+  asserts on the message
+
+When in doubt, treat it as forbidden. RequestChanges is reversible (the
+implementer iterates); a wrongly-fix-forwarded logic change is not.
+
+### Worked examples — apply the discriminator without ambiguity
+
+| Diff | Verdict | Reason |
+|------|---------|--------|
+| Fix typo `recieve` → `receive` in a `//` comment | ✅ Fix-forward | Comment text; no behavior delta |
+| Fix typo `recieve` → `receive` in a `pub fn recieve(...)` name | ❌ RequestChanges | Identifier change ripples to every caller |
+| Update a markdown code fence in `docs/` to show the *actual* current command output | ✅ Fix-forward | Documentation accuracy; no source touched |
+| Update an output-asserting test's expected string to match new output | ❌ RequestChanges | The test IS executable behavior; this is a logic decision |
+| Add a missing trailing `.` to an error message string literal | ❌ RequestChanges | String change; tests asserting on the message break |
+| Re-run `cargo fmt --all` to clear whitespace drift | ✅ Fix-forward | No semantic delta; CI would have flagged it anyway |
+| Replace `.unwrap()` with `?` propagation | ❌ RequestChanges | Logic change — control flow now early-returns on Err |
+| Reword the `## Description` prose at the top of a skill template | ✅ Fix-forward | Skill prose is documentation |
+| Edit a `bash` block inside a skill template that the reviewer follows | ❌ RequestChanges | Skill bash blocks are behavior — a reviewer following the template runs them |
+| Bump a doc link from `v0.5.1` to `v0.5.2` (no code change) | ✅ Fix-forward | Documentation accuracy |
+| Gate a flaky test on `#[cfg(unix)]` | ❌ RequestChanges | Test attributes change which tests run on which platform — behavior |
+
+### Procedure — when fix-forward is permitted
+
+1. **Commit on the PR's branch** with a small, atomic, single-purpose message
+   in the project's commit format — typically `[AI:claude] docs(scope):
+   <description> (PR-<N>)` or `[AI:claude] style: cargo fmt --all`. One
+   commit per logical fix; do not bundle.
+2. **Push and wait for CI CLEAN.** GitHub re-runs the workflow on the new
+   HEAD. Do **not** proceed to the Approved verdict until:
+
+   ```bash
+   gh pr view <N> --json mergeStateStatus --jq .mergeStateStatus
+   ```
+
+   returns `CLEAN`. If checks are still pending, wait (`gh run watch
+   <run-id>`). If checks went red, the fix-forward made things worse —
+   revert it (`git revert <sha> && git push`) and switch to RequestChanges.
+3. **Record the fix-forward in the consolidated review comment** (step 7) as
+   a dedicated section under the verdict table, naming the commit SHA + a
+   one-line summary per fix-forward commit:
+
+   ```markdown
+   **Fix-forwards** (reviewer-applied, doc-only — `mergeStateStatus: CLEAN` confirmed):
+   - `<short-sha>` — Fix typo `recieve` → `receive` in `aida-cli/src/main.rs:1234` comment
+   ```
+
+4. **File a `kind:reviewer-fix-forward` finding.** Required in **both**
+   interactive and headless mode — self-grading deserves the same
+   independent checkpoint either way. The finding rides STORY-285's
+   `from-review:PR-N` surface (the same surface step 7b uses):
+
+   ```bash
+   aida add --type task --status draft \
+     --tags "from-review:PR-<N>,kind:reviewer-fix-forward,severity:cosmetic" \
+     --title "<one-line summary of the fix-forward>" \
+     --description-stdin <<'EOF'
+   Reviewer fix-forwarded a doc-only correction during review of PR-<N>.
+
+   Commit: <full-sha>
+   Files:  <file:line[, file:line, ...]>
+   Change: <what changed and why — typo, output drift, prose clarity, fmt drift>
+
+   Verdict: Approved (mergeStateStatus CLEAN confirmed on the fix-forward
+   commit before approval).
+   PR: <PR URL>
+   EOF
+   ```
+
+   - **Reuse the idempotency probe from step 7b** — a re-review of the same
+     PR must not double-file. Skip the `aida add` call when
+     `aida list --tags "from-review:PR-<N>,kind:reviewer-fix-forward" --all`
+     already names this commit's SHA in the description body.
+   - **STORY-285 gate.** If STORY-285's findings surface is not yet shipped
+     in this project (`aida findings list` returns a not-implemented error),
+     stub the finding by appending a `Fix-forward filing pending:` bullet to
+     the consolidated review comment naming the commit SHA + a one-line
+     reason, so a human can replay it after STORY-285 lands.
+5. **Verdict stays Approved.** The drain continues; the finding is the
+   lightweight after-the-fact review of the reviewer's own commit. Do not
+   invent an `Approved-with-fixforward` verdict tier — the verdict file
+   (step 6a) still routes through the existing `Approved` /
+   `RequestChanges` / `Rejected` enum.
+
+### What this policy is NOT
+
+- Not a verdict tier — no `Approved-with-fixforward`. The verdict is
+  `Approved`; the fix-forward is recorded in the comment + a finding.
+- Not an excuse to skip Step 4's adversarial deep-pass — fix-forward
+  addresses misses the reviewer is willing to fix mechanically, not gaps
+  that need the implementer's judgment.
+- Not retroactive — once the PR is merged, the policy is closed for that
+  PR; any new observation routes through a follow-up issue.
+- Not a way to fix-forward across PRs — the fix-forward commit lands on
+  the PR's branch only, never on `main` or another PR's branch.
 
 ## Workflow
 
@@ -281,15 +434,43 @@ If you can construct a plausible breaking input that the test plan didn't cover,
 
 **Composes with `/ultrareview`, doesn't replace it.** This adversarial phase closes part of the depth gap a single-agent review historically has against multi-agent fleets. For high-stakes PRs the user can still run `/ultrareview` afterwards; it brings independent framings and remains the depth ceiling. See `docs/positioning/vs-ultrareview.md`.
 
-### 5. Mechanical fix-forward (small commits on the PR's branch)
+### 5. Fix-forward (only under the doc-only policy) — trace:TASK-333 | ai:claude
 
-If the only blockers are mechanical — `cargo fmt` drift, a `#[cfg(unix)]` test fragility, a typo in a comment, an obvious unwrap that should be `?` — fix them on the PR's branch as small, atomic commits with `[AI:claude] style/fix(...)` messages. Don't fix-forward anything semantic; that's an iteration the implementer should drive.
+Re-read the *Fix-forward policy* section near the top of this skill. The
+discriminator is **"would re-running `cargo check` / `cargo test` reach a
+different result?"** — if yes or maybe, the change is FORBIDDEN: skip step 5
+and return RequestChanges through step 6a's verdict file. The worked-examples
+table in the policy section is the reference; consult it on every borderline
+case rather than improvising.
 
-Examples from PR-7's review cycle:
-- `[AI:claude] style: cargo fmt --all` (drift introduced after TASK-57's clean)
-- `[AI:claude] test(session): gate USERPROFILE assertion on #[cfg(unix)]` (TASK-62, Windows breakage)
+When a blocker qualifies under the policy (doc prose, a comment typo, an
+output-example that drifted, `cargo fmt` whitespace), execute the
+**Procedure** in the policy section in order:
 
-After each mechanical fix, re-run the affected test plan from step 3.
+1. Commit small, atomic, single-purpose
+2. Push and wait for `gh pr view <N> --json mergeStateStatus --jq .mergeStateStatus` to return `CLEAN` — never approve on pending or red CI
+3. Record each fix-forward commit (SHA + one-line summary) in the
+   consolidated review comment (step 7) under a dedicated **Fix-forwards**
+   bullet list
+4. File a `kind:reviewer-fix-forward` finding (interactive and headless)
+5. Verdict stays Approved — the finding is the after-the-fact independent
+   checkpoint on the reviewer's self-graded commit
+
+After every fix-forward commit, re-run the affected test plan from step 3.
+If any verdict downgrades, the policy's *not retroactive* line applies — do
+not stack a second fix-forward on top of the first.
+
+**Forbidden examples that look mechanical but are not.** These have shipped
+as fix-forwards in past review cycles; the policy now forbids them. If you
+encounter one, RequestChanges:
+
+- `[AI:claude] test(session): gate USERPROFILE assertion on #[cfg(unix)]` —
+  a `#[cfg(...)]` attribute on a test changes which tests CI runs on which
+  platform; that's behavior.
+- `[AI:claude] fix: change .unwrap() to ?` — propagation is control flow; a
+  panic-on-Err becomes an early-return-on-Err.
+- `[AI:claude] fix: add trailing period to error message` — string-literal
+  change; tests asserting on the message break.
 
 ### 6. Verify CI is green
 
@@ -378,6 +559,42 @@ EOF
   migration, a release tag), genuine strategic uncertainty. The code review
   still stands: write your real `verdict` (`Approved` if the code passed)
   **and** `"merge": "escalated-to-human"`.
+- `implementation_complexity` — **advisory, not graded** (STORY-439).
+  The diff-grounded complexity the changes actually demanded, one of
+  `low` / `med` / `high`. Captured to
+  `.aida/complexity-calibration/<SPEC>.yaml` for the three-way
+  calibration view (`aida autonomy calibration mismatches`). The
+  reviewer is the most objective of the three measurement points
+  (pickup → ship → review) because you see the full diff. Never part
+  of the PASS / FAIL decision; the field is omitted on older verdict
+  files.
+- `complexity_agreement` — **advisory, not graded** (STORY-439). Your
+  call on whether the implementer's ship-side complexity estimate
+  matched the diff: `matched` / `implementer-underestimated` /
+  `implementer-overestimated`. Omit when there was no ship-side
+  estimate to compare against — `aida` will derive the field
+  mechanically from the pickup/ship slot if you skip it.
+- `implementation_effort` — **advisory, not graded** (STORY-451).
+  Your effort estimate from the observed diff, one of `15m` / `1h` /
+  `4h` / `1d` / `1w`. `1d` means 8 work-hours; `1w` means 5
+  work-days / 40 work-hours. Captured to
+  `.aida/effort-calibration/<SPEC>.yaml` as the review touchpoint.
+
+Example with the STORY-439 fields filled in (`--no-human=both`,
+diff was bigger than the implementer claimed):
+
+```bash
+cat > "$AIDA_REVIEW_VERDICT_FILE" <<'EOF'
+{
+  "verdict": "Approved",
+  "summary": "ships cleanly",
+  "mode": "orchestrator-phase-3",
+  "implementation_complexity": "high",
+  "complexity_agreement": "implementer-underestimated",
+  "implementation_effort": "1d"
+}
+EOF
+```
 
 **Escalating the merge decision.** Escalating is the honest move when you
 would otherwise be *guessing* whether to merge — it is distinct from
@@ -551,7 +768,7 @@ orchestrator-headless reviewer's verdict is read by phase 4. trace:BUG-280
   ```
 
   In default interactive mode leave the sentinel untouched and let the user
-  press Ctrl+D. Full protocol: `docs/aida-discipline/skill-prompt-kinds.md`.
+  press Ctrl+D. Full protocol: `docs/aida/discipline/skill-prompt-kinds.md`.
   trace:TASK-329 | ai:claude
 
 ### 7b. File non-blocking findings as draft TASKs (headless drain) — trace:STORY-278

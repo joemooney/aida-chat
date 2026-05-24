@@ -1,4 +1,4 @@
-<!-- AIDA Generated: v2.0.0 | checksum:20844eb9 | DO NOT EDIT DIRECTLY -->
+<!-- AIDA Generated: v2.0.0 | checksum:916f0767 | DO NOT EDIT DIRECTLY -->
 <!-- To customize: copy this file and modify the copy -->
 
 # AIDA Conventions
@@ -16,7 +16,7 @@ canonical.
 
 Requirements database: distributed git-canonical store at `.aida-store/` (orphan branch `aida-store`, plus a rebuildable SQLite cache at `.aida/cache.db`).
 
-Currently tracking **21** requirement(s).
+Currently tracking **31** requirement(s).
 
 ### Daily commands
 
@@ -69,6 +69,7 @@ Examples:
 ```
 [AI:claude] feat(auth): add login validation (FR-0042)
 [AI:claude:med] fix(api): handle null response (BUG-0023)
+[AI:antigravity+claude] test(hooks): accept mixed authorship (TASK-509)
 chore(deps): update dependencies        # no REQ-ID needed
 docs: update README                     # no REQ-ID needed
 ```
@@ -76,7 +77,9 @@ docs: update README                     # no REQ-ID needed
 Rules:
 
 - `[AI:tool]` required when commit includes AI-assisted code (any file with a
-   `// trace:... | ai:tool` comment changed).
+   `// trace:... | ai:tool` comment changed). Use `[AI:tool1+tool2]` for
+   mixed-agent authorship, with optional confidence on the whole commit
+   (`[AI:tool1+tool2:med]`).
 - `type` required: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
    `build`, `ci`, `chore`, `revert`.
 - `(scope)` optional — component or area affected.
