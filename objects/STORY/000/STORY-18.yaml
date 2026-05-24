@@ -8,9 +8,15 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:07:28.175249307Z
-modified_at: 2026-05-24T20:42:57.839626524Z
+modified_at: 2026-05-24T20:43:22.286760551Z
 req_type: Story
 tags:
 - capture-verbs
 - feedback-loop
 - parent:EPIC-16
+comments:
+- id: 019e5bba-632e-7562-b3f5-8d008dc3af90
+  author: joe
+  content: 'Marked Completed by advisor cleanup. The five virtuous-loop capture verbs intent is satisfied by STORY-21..STORY-25, which break out each verb as a concrete story with acceptance criteria. STORY-21 and STORY-22 already shipped (master commits 354aa3f + e1e1c3f + daec131 + 5d33b36, GH PRs #2/#3/#4/#5). STORY-23/24/25 remain on the queue. Per the substrate-cleanup proposal on EPIC-16.'
+  created_at: 2026-05-24T20:43:22.286760551Z
+  modified_at: 2026-05-24T20:43:22.286760551Z
