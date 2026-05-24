@@ -8,7 +8,7 @@
 //! it requires the `aida` CLI on PATH and a real .aida-store.
 
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{Command as StdCommand, ExitCode};
 
 use aida_chat::server::mcp::McpClient;
 use serde_json::json;
@@ -19,7 +19,12 @@ async fn main() -> ExitCode {
     let cmd = PathBuf::from("aida");
     let args = vec!["mcp-serve".to_string()];
 
-    println!("→ spawning {} {:?} in {}", cmd.display(), args, cwd.display());
+    println!(
+        "→ spawning {} {:?} in {}",
+        cmd.display(),
+        args,
+        cwd.display()
+    );
     let client = match McpClient::global(&cmd, &args, &cwd).await {
         Ok(c) => c,
         Err(e) => {
@@ -79,6 +84,76 @@ async fn main() -> ExitCode {
         );
     }
 
+    let marker = format!(
+        "mcp_smoke temporary add_comment check {}",
+        std::process::id()
+    );
+    // Live tools/list advertises add_comment(id, text). Current AIDA stores
+    // that text as the author and hardcodes the body to "mcp"; this smoke
+    // exercises and cleans up the live MCP behavior so aida-chat can keep
+    // using the CLI write path until the upstream tool is fixed.
+    step!(
+        "tools/call add_comment STORY-21",
+        client.call_tool(
+            "add_comment",
+            json!({"id": "STORY-21", "text": marker.clone()})
+        )
+    );
+    match delete_smoke_comment("STORY-21", &marker) {
+        Ok(true) => println!("✓ cleaned up temporary add_comment smoke comment"),
+        Ok(false) => {
+            println!("⚠ add_comment returned ok, but no persisted comment was visible to clean up")
+        }
+        Err(e) => {
+            println!("FAIL: cleanup temporary comment: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+
     println!("✓ all smoke checks passed");
     ExitCode::SUCCESS
+}
+
+fn delete_smoke_comment(spec_id: &str, marker: &str) -> Result<bool, String> {
+    let out = StdCommand::new("aida")
+        .args(["comment", "list", spec_id])
+        .output()
+        .map_err(|e| format!("spawn aida comment list: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "aida comment list exited with {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let mut previous_id = None;
+    for line in stdout.lines() {
+        if line.ends_with(':') && !line.starts_with(' ') {
+            previous_id = Some(line.trim_end_matches(':').to_string());
+        }
+        if line.trim() == marker || line.contains(marker) {
+            let comment_id = previous_id.ok_or_else(|| "marker had no preceding ID".to_string())?;
+            let delete = StdCommand::new("aida")
+                .args([
+                    "comment",
+                    "delete",
+                    "--req-id",
+                    spec_id,
+                    "--comment-id",
+                    &comment_id,
+                ])
+                .output()
+                .map_err(|e| format!("spawn aida comment delete: {e}"))?;
+            if delete.status.success() {
+                return Ok(true);
+            }
+            return Err(format!(
+                "aida comment delete exited with {}: {}",
+                delete.status,
+                String::from_utf8_lossy(&delete.stderr).trim()
+            ));
+        }
+    }
+    Ok(false)
 }
