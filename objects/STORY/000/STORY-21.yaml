@@ -8,8 +8,14 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:38:56.651524973Z
-modified_at: 2026-05-24T18:09:40.810661505Z
+modified_at: 2026-05-24T18:11:54.092242630Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
 - epic:EPIC-16
+comments:
+- id: 019e5b2f-b66c-7e91-b490-61e1a85c350c
+  author: joe
+  content: 'Implementation note: live tools/list advertises add_comment(id, text), but the current aida mcp-serve implementation returns success without a CLI-visible persisted comment in this repo; direct MCP source also appears to wire text as author/content incorrectly. STORY-21 backend therefore uses the correct aida comment add CLI write path for the product endpoint while mcp_smoke documents the live MCP behavior. Verified POST /api/sessions/:id/comment success and validation bodies; temporary smoke comments were deleted.'
+  created_at: 2026-05-24T18:11:54.092242630Z
+  modified_at: 2026-05-24T18:11:54.092242630Z
