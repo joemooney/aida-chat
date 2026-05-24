@@ -21,14 +21,14 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
 use crate::messages::{
-    ChatHistory, ChatTurn, CommentRequest, CommentResponse, CreateSessionResponse, Role,
-    ServerInfo, SpecRequest, SpecResponse,
+    ChatHistory, ChatTurn, CommentRequest, CommentResponse, CreateSessionResponse, MemoryRequest,
+    MemoryResponse, Role, ServerInfo, SpecRequest, SpecResponse,
 };
 use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
 use crate::server::config::{Backend, ServerConfig};
 use crate::server::sessions::SessionStore;
-use crate::server::tools::{aida, ToolError};
+use crate::server::tools::{aida, memory, ToolError};
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -47,6 +47,7 @@ pub fn router(sessions: Arc<dyn SessionStore>, cfg: Arc<ServerConfig>) -> Router
         .route("/sessions/{id}/history", get(get_history))
         .route("/sessions/{id}/comment", post(add_comment))
         .route("/sessions/{id}/spec", post(add_spec))
+        .route("/sessions/{id}/memory", post(add_memory))
         .route("/chat", get(chat_stream))
         .layer(Extension(state))
 }
@@ -184,6 +185,57 @@ fn spec_error(status: StatusCode, error: String) -> (StatusCode, Json<SpecRespon
         Json(SpecResponse {
             ok: false,
             spec_id: None,
+            message: None,
+            error: Some(error),
+        }),
+    )
+}
+
+// trace:STORY-23 | ai:codex
+async fn add_memory(
+    Extension(state): Extension<ApiState>,
+    Path(id): Path<String>,
+    AxumJson(body): AxumJson<MemoryRequest>,
+) -> (StatusCode, Json<MemoryResponse>) {
+    if state.sessions.get(&id).await.is_none() {
+        return memory_error(StatusCode::NOT_FOUND, "unknown session_id".into());
+    }
+
+    match memory::write_memory(
+        &state.cfg,
+        &json!({
+            "name": body.name,
+            "description": body.description,
+            "type": body.r#type,
+            "body": body.body,
+        }),
+    )
+    .await
+    {
+        Ok(path) => memory_ok(path),
+        Err(ToolError::BadInput(e)) => memory_error(StatusCode::BAD_REQUEST, e),
+        Err(e) => memory_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn memory_ok(path: String) -> (StatusCode, Json<MemoryResponse>) {
+    (
+        StatusCode::OK,
+        Json(MemoryResponse {
+            ok: true,
+            path: Some(path),
+            message: Some("Memory saved".into()),
+            error: None,
+        }),
+    )
+}
+
+fn memory_error(status: StatusCode, error: String) -> (StatusCode, Json<MemoryResponse>) {
+    (
+        status,
+        Json(MemoryResponse {
+            ok: false,
+            path: None,
             message: None,
             error: Some(error),
         }),
