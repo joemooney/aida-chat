@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:38:56.651524973Z
-modified_at: 2026-05-24T18:11:54.092242630Z
+modified_at: 2026-05-24T18:13:00.252994949Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -19,3 +19,8 @@ comments:
   content: 'Implementation note: live tools/list advertises add_comment(id, text), but the current aida mcp-serve implementation returns success without a CLI-visible persisted comment in this repo; direct MCP source also appears to wire text as author/content incorrectly. STORY-21 backend therefore uses the correct aida comment add CLI write path for the product endpoint while mcp_smoke documents the live MCP behavior. Verified POST /api/sessions/:id/comment success and validation bodies; temporary smoke comments were deleted.'
   created_at: 2026-05-24T18:11:54.092242630Z
   modified_at: 2026-05-24T18:11:54.092242630Z
+- id: 019e5b30-b8dc-7ea3-8e3c-cff9df03221f
+  author: joe
+  content: 'Codex opened stacked PR #2 for STORY-21: https://github.com/joemooney/aida-chat/pull/2 (base codex/epic-16-mcp-foundation until EPIC-16 PR #1 lands). Commit d5f679a. Verification: cargo test --features ssr --lib passed 17/17; cargo run --example mcp_smoke --features ssr passed with documented MCP add_comment persistence defect; HTTP endpoint smoke verified agreed 400/200 JSON contract and temporary comment cleanup.'
+  created_at: 2026-05-24T18:13:00.252994949Z
+  modified_at: 2026-05-24T18:13:00.252994949Z
