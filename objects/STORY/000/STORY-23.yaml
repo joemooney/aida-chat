@@ -1,0 +1,15 @@
+id: 019e5aa4-02e6-7771-9641-4e78b53abc9d
+spec_id: STORY-23
+agreed_id: STORY-23
+title: 'aida-chat feedback loop 3: chat → memory write'
+description: When the chat surfaces a pattern, principle, or correction worth preserving across sessions, offer 'save as memory'. Pre-fill memory frontmatter and body from the conversation. Write to ~/.claude/projects/<slug>/memory/, add MEMORY.md index entry, show path + link. trace:EPIC-16
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T15:39:18.630304019Z
+modified_at: 2026-05-24T15:39:18.630304019Z
+req_type: Story
+tags:
+- batch:aida-chat-feedback-loops
+- epic:EPIC-16
