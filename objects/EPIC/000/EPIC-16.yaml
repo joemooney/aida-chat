@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-24T16:20:52.544264932Z
+modified_at: 2026-05-24T16:37:49.022958926Z
 req_type: Epic
 tags:
 - first-consumer
@@ -118,3 +118,8 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-24T16:20:52.544264932Z
   modified_at: 2026-05-24T16:20:52.544264932Z
+- id: 019e5ad9-935e-7ee2-969c-b397b0b77cfe
+  author: 'Codex implementation update: advisor respawn gap fixed for PR-1. Replaced the MCP OnceCell singleton with a swappable Arc-backed global slot, added short unavailable backoff, clears the slot on reader EOF or broken-pipe Closed, maps Closed/Timeout to CLI fallback for legacy tools, and documented the respawn policy in mcp module/client comments. Verification: cargo test --features ssr --lib passes 16/16 including global_respawns_after_child_death; cargo run --example mcp_smoke --features ssr passes against live aida mcp-serve. Manual full aida-chat /api/chat death test was attempted but blocked by local Anthropic API credit exhaustion before any tool call could run.'
+  content: mcp
+  created_at: 2026-05-24T16:37:49.022927862Z
+  modified_at: 2026-05-24T16:37:49.022927862Z
