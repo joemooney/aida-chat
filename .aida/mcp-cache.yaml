@@ -2,6 +2,126 @@ name: aida-chat
 title: aida-chat
 description: ''
 requirements:
+- id: 019e58ce-894b-71a2-b0db-88a049190e64
+  spec_id: EPIC-16
+  agreed_id: EPIC-16
+  title: Evolve aida-chat into first-proof-of-concept aida-consumer
+  description: "AIDA's 'agent-collaboration layer' positioning has been theoretical — only proven via\n   self-dogfood. aida-chat ships as the first NON-dogfood consumer, proving (a) AIDA's substrate is usable from outside, (b) the plug-in/add-on pattern works, and (c) \n  substrate-grounded LLM chat creates a virtuous feedback loop.\n\n  Existing architecture (Leptos+Axum web app, custom Rust agent loop, MCP integration tools, own .aida-store) is a 10-day-old MVP that predates today's substrate \n  growth (EPIC-31 launchers, calibration, lifecycle short-circuit). The evolution is 'leverage today's substrate' not 'build from scratch.'\n\n  ## Differentiation thesis\n\n  Generic LLM chat sees code + commits. aida-chat sees code + commits + SPEC GRAPH + TRACE COMMENTS + PLAN ARCHIVE + PUNT LEDGER + CALIBRATION DATA + MEMORIES. Every \n  claim it makes is attributed to a SPEC-ID + file:line. That's the differentiation.\n\n  ## Five feedback loops (substrate-growth mechanisms)\n\n  1. chat → spec comment (discussion summarized as aida comment add)\n  2. chat → new task/bug (friction surfaces, pre-filled aida add offered)\n  3. chat → memory (patterns + principles get written as ~/.claude/projects/<slug>/memory/)\n  4. chat → plan seed (design clarification on Approved spec offered via aida ultraplan)\n  5. chat → trace gap detection (scan // trace comments, ask LLM 'does this code still match this spec?')\n\n  ## MCP-first integration contract\n\n  aida-chat consumes AIDA via MCP first (list_requirements, show_requirement, search_requirements, resources). CLI as fallback (aida list --json, aida show, aida \n  history --events). Direct file reads only for plan archive + punt ledger (until MCP exposes them).\n\n  ## Out of scope\n\n  - Multi-project (one aida-chat install talks to one project at a time)\n  - Hosted SaaS (self-host first)\n  - Cross-aida-substrate sync\n\n  ## Composes with\n\n  - AIDA's MCP server (substrate this depends on)\n  - AIDA's spec graph + trace web (the differentiation surface)\n  - Future projects-using-aida (this EPIC is the template they inherit)"
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T07:06:31.115659540Z
+  modified_at: 2026-05-24T16:20:52.544264932Z
+  req_type: Epic
+  tags:
+  - first-consumer
+  - plug-in
+  - substrate-grounded
+  - virtuous-loop
+  - vision
+  comments:
+  - id: 019e5a9b-9b67-7521-af08-e49d4a7152e1
+    author: joe
+    content: |-
+      Master advisor verdict on the /ultraplan output (saved to docs/plans/2026-05-24-epic-16-aida-chat-evolution.md): STRONG APPROVE with three refinements + one strategic question.
+
+      **Approve rationale:** Excellent foundational-slice plan. Standout moves:
+
+      - **Scope-cut to PR 1 = MCP-first + trace tool + system prompt; 5 feedback loops as named follow-up PRs (PR 2-6)** — exactly right. Lands the infrastructure first, then the loops compose. Each loop is one focused PR.
+      - **Hand-rolled MCP client (~200 LOC) instead of pulling rmcp** — preserves the auditable, dependency-light ethos of existing tools/. Right substrate-discipline call.
+      - **Singleton MCP subprocess (OnceCell + lazy spawn)** modeled on backends/claude_cli.rs's LiveProcessRegistry pattern but simpler — reuse-not-reinvent done correctly.
+      - **Tool-spec stability (existing aida_list / show / search / history names + schemas preserved)** — implementations swap underneath; agent contract unchanged. Right migration shape.
+      - **System prompt update (3 lines)** asks the model to cite SPEC-ID + path:line for grounded claims. The differentiation thesis made operational.
+      - **find_traces as the killer demo** — the SPEC-ID-to-file:line mapping is exactly the substrate-grounded surface generic LLM chats lack. Sample manual verification (Prompt 2: 'Where is EPIC-1 implemented?') makes the value visible.
+      - **CLI fallback path** — graceful degradation when MCP unavailable. Important for trust.
+
+      **Three refinements:**
+
+      1. **MCP subprocess CWD must be the target project, not aida-chat's CWD.** The plan adds ServerConfig.mcp_command + mcp_args but doesn't address the subprocess's working directory. aida-chat's OVERVIEW.md vision is 'scoped chat UI you can point at ANY project' — so the mcp-serve must run in THAT project's directory to serve THAT project's substrate. Today aida-chat already has a repo_root config (per the AIDA_CHAT_REPO env hint in the plan). The mcp-serve subprocess should be spawned with cwd = ServerConfig.repo_root. Otherwise aida-chat queries aida-chat's own substrate (wrong) rather than the user's target project (right).
+
+      2. **find_traces regex should handle AIDA's full trace-comment format.** The plan's regex is . AIDA's actual trace format is  (per CLAUDE.md). The pipe + ai:tool suffix is common. Regex should be  or similar to match correctly in single-spec + multi-spec lines while skipping the | ai:tool tail. Validate against scan of own codebase before shipping.
+
+      3. **MCP server respawn on failure.** The plan says 'restarted on failure' but doesn't detail the mechanism. backends/claude_cli.rs's pattern is eviction-from-map; the singleton variant needs a 'kill + respawn on next call' policy. Worth specifying: if the OnceCell's client returns McpError on a tool call AND the subprocess is dead (Child::try_wait returns Some), replace the OnceCell value via Mutex<OnceCell> swap. Otherwise a dead mcp-serve permanently disables MCP for the session lifetime — degrades to CLI fallback forever, even after operator restarts the AIDA install.
+
+      **One strategic question for the implementer:**
+
+      The plan keeps existing tool *names* stable (aida_list, aida_show, etc.) but the MCP server's actual tool names are list_requirements, show_requirement, search_requirements. The plan handles this with argument-translation in tools/aida.rs. Worth confirming with a smoke test before deep implementation: run aida mcp-serve manually, send tools/list, and verify the actual names + schemas match the plan's assumption. If AIDA's MCP-server tool names differ from the plan's, the translation table is the one place to fix — but better to know before writing the wrappers.
+
+      **Non-blocking observation:**
+
+      The Follow-up PRs section (PR 2-6) is gold — each is a focused, named, composable slice. Recommend filing each as a child STORY under EPIC-16 NOW (in aida-chat's substrate) so the implementer + future agents have queryable anchors. Master can do this if the implementer prefers to focus on PR 1.
+
+      **Ship PR 1.** Trailer: (EPIC-16). Standard cadence — aida session start --owns EPIC-16 → implement per plan + refinements → cargo build --features ssr → cargo test → aida pr ship → aida session end. Manual verification (the 4 prompts in the plan's Verification section) is the load-bearing test for the differentiation thesis.
+
+      — master advisor (from aida repo, dispatching to aida-chat substrate)
+    created_at: 2026-05-24T15:30:07.847497361Z
+    modified_at: 2026-05-24T15:30:07.847497361Z
+  - id: 019e5aaa-cb1c-76f0-b449-afa636074f54
+    author: joe
+    content: |-
+      Master verdict on Codex-1's implementation report (EPIC-16 PR 1 — MCP-first + trace/citation, +212/-24, 15/15 tests, live smoke passed):
+
+      APPROVE — ready to commit, with TWO MUST-CONFIRM items first.
+
+      **Must-confirm before commit:**
+
+      1. **MCP subprocess CWD targeting.** Confirm the spawned 'aida mcp-serve' subprocess uses 'cwd = ServerConfig.repo_root', NOT the aida-chat process's CWD. This is load-bearing: if mcp-serve runs in aida-chat's directory, it queries aida-chat's substrate instead of the target project's. The OVERVIEW.md vision is 'scoped chat UI you can point at ANY project'; this only works if MCP targets the right substrate. Verify in src/server/mcp/client.rs's subprocess spawn — Command::new('aida').arg('mcp-serve').current_dir(&config.repo_root).
+
+      2. **MCP server respawn after subprocess death.** The report says 'reader task clears the inbox on EOF so waiters unblock with Closed rather than Timeout' — death-detection works. But: does the OnceCell get REPLACED so the NEXT tool call respawns a fresh subprocess? Or is MCP permanently disabled for the rest of the aida-chat process lifetime once the first subprocess dies? The fallback to CLI works (good), but a transient mcp-serve crash shouldn't permanently degrade the chat session. Policy: if the singleton's reader signals Closed AND the subprocess is dead (try_wait returns Some), replace the OnceCell value via a Mutex<Option<Arc<McpClient>>> swap before serving the next tool call. State the chosen policy in mcp/mod.rs doc-comment.
+
+      **Approve as-shipped:**
+
+      - Custom ~200 LOC JSON-RPC 2.0 stdio client (no rmcp dep) — correct substrate-discipline call
+      - OnceCell + lazy spawn + kill_on_drop(true) — right primitives
+      - Per-id oneshot routing — clean
+      - MCP-first with CLI fallback via McpError::Unavailable sentinel — right shape
+      - aida_resource (list|read) — correct tool surface
+      - find_traces regex empirically validated (EPIC-1 in 4 files, EPIC-16 in 5, STORY-3 in 7 including multi-ID positions) — approved
+      - aida_history CLI-only with brief-vs-reality note — correct; master filed TASK-538 on AIDA core to add MCP history tool so aida-chat can drop the CLI fallback later
+      - System prompt update + tool hints — matches plan
+      - mcp_smoke.rs + traces_smoke.rs — bonus, keep them
+      - Test coverage (8 new + 7 existing = 15/15) — adequate
+
+      **Commit when items 1 + 2 confirmed.** Trailer: (EPIC-16). Then 'aida brief ack .aida/agent-briefs/codex/EPIC-16-2026-05-24T152433Z.md' and open PR. Five follow-up STORYs (STORY-21..STORY-25) are filed in aida-chat substrate for the feedback loops — leave them for follow-up PRs, don't expand PR 1.
+
+      — master advisor
+    created_at: 2026-05-24T15:46:43.100009329Z
+    modified_at: 2026-05-24T15:46:43.100009329Z
+  - id: 019e5ac1-080a-7320-9bef-a241b50e3ef9
+    author: joe
+    content: |-
+      Advisor handoff 2026-05-24: master advisor (~/ai/aida) delegating aida-chat advisor seat to a dedicated session. Bootstrap doc: docs/aida/advisor-bootstrap-2026-05-24.md. Day-1 targets: EPIC-16 PR-1 merged + STORY-21 shipped + killer demo recorded.
+
+      Coordination protocol: low-ceremony substrate observations via comments on this repo; medium-ceremony cross-project AIDA core gaps as TASKs filed in ~/ai/aida; high-ceremony architecture decisions via paste-ready prompt forwarded to master.
+
+      — master (handoff complete)
+    created_at: 2026-05-24T16:11:00.490055069Z
+    modified_at: 2026-05-24T16:11:00.490055069Z
+  - id: 019e5aca-10c0-7e43-a8ee-b2e44e3ae79f
+    author: joe
+    content: |-
+      Advisor seat activated 2026-05-24. Verdict on Codex-2's PR-1 against master's two must-confirms:
+
+      **Item 1 — MCP subprocess CWD targeting: ✅ CONFIRMED.**
+      `McpClient::global(&cfg.mcp_command, &cfg.mcp_args, &cfg.repo_root)` at src/server/tools/aida.rs:206,258; `spawn_and_init` applies `cmd.current_dir(&cwd)` at src/server/mcp/client.rs:196. Subprocess targets the configured project root. Load-bearing for 'point at any project' — works.
+
+      **Item 2 — Respawn on subprocess death: ❌ NOT IMPLEMENTED. HOLD COMMIT.**
+      Codex-2's design comment at src/server/mcp/client.rs:19-34 explicitly says 'Why no in-process restart loop' — argues that CLI fallback + Closed errors are sufficient. They are not. Verified by reading the failure path:
+
+      - OnceCell stores `Result<McpClient, String>`, never replaced. Once spawn succeeds, the cell holds `Ok(client)` for the process lifetime.
+      - After subprocess death the reader task exits and clears the inbox; next `request()` returns `McpError::Closed` (broken pipe + dropped oneshot).
+      - `try_mcp` (src/server/tools/aida.rs:257-268) maps only `McpError::Unavailable` to the `mcp-unavailable:` prefix that `is_unavailable` checks for. `Closed`/`Timeout`/`ToolFailed` get the generic `'mcp tool {tool}: {e}'` format — **no** prefix, so the CLI fallback at lines 140/168/187 **does not trigger**.
+
+      Net: a single transient mcp-serve death turns every subsequent aida_list / aida_show / aida_search / aida_resource call into a hard error for the rest of the aida-chat process lifetime. This is *worse* than master's 'degrades to CLI fallback forever' diagnosis — there's no fallback at all on the Closed path.
+
+      Surgical fix scope (sketched in follow-up brief to Codex-2): swap `OnceCell<Result<McpClient,_>>` for `Mutex<Option<Arc<McpClient>>>`; on `Closed`/broken-pipe `try_wait` the child, if dead clear the cell so the next `global()` respawns. Also map `Closed`/`Timeout` to the unavailable marker in `try_mcp` so CLI fallback covers the in-flight call while the next call respawns. Total < ~60 LOC.
+
+      Codex-2 NOT yet told to commit. Follow-up brief drafted for operator to forward.
+
+      — aida-chat advisor
+    created_at: 2026-05-24T16:20:52.544264932Z
+    modified_at: 2026-05-24T16:20:52.544264932Z
 - id: 019e242c-c207-7270-89bc-80514bff4b3d
   spec_id: EPIC-8
   agreed_id: EPIC-8
@@ -224,6 +344,21 @@ requirements:
   - rel_type: Child
     target_id: 019e242c-c207-7270-89bc-80514bff4b3d
     created_at: 2026-05-14T01:50:02.987234174Z
+- id: 019e5aa4-2cd2-7511-8767-a0ff16c8f3e3
+  spec_id: STORY-24
+  agreed_id: STORY-24
+  title: 'aida-chat feedback loop 4: chat → plan seed (aida ultraplan)'
+  description: 'When the chat surfaces design clarification for an Approved SPEC, offer ''seed a /ultraplan''. One-click invokes ''aida ultraplan <SPEC-ID>'' for /ultraplan round-trip. Variant: ''paste the plan back'' invokes /aida-import-plan path. trace:EPIC-16'
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T15:39:29.362965434Z
+  modified_at: 2026-05-24T15:39:29.362965434Z
+  req_type: Story
+  tags:
+  - batch:aida-chat-feedback-loops
+  - epic:EPIC-16
 - id: 019e2411-ada9-71b1-b537-16a0da90f143
   spec_id: STORY-3
   agreed_id: STORY-3
@@ -248,6 +383,23 @@ requirements:
   - rel_type: Child
     target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
     created_at: 2026-05-14T01:19:59.421345547Z
+- id: 019e58cf-6508-7a52-82e5-cb64e23603cd
+  spec_id: STORY-17
+  agreed_id: STORY-17
+  title: Substrate-grounded context assembly with source attribution
+  description: ''
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T07:07:27.368395128Z
+  modified_at: 2026-05-24T07:07:27.368395128Z
+  req_type: Story
+  tags:
+  - context-assembly
+  - parent:EPIC-16
+  - source-attribution
+  - substrate-grounded
 - id: 019e242d-00ed-7070-9dc2-a5531c525c65
   spec_id: STORY-9
   agreed_id: STORY-9
@@ -313,6 +465,23 @@ requirements:
   - rel_type: Child
     target_id: 019e242c-c207-7270-89bc-80514bff4b3d
     created_at: 2026-05-14T01:49:52.835313565Z
+- id: 019e58cf-6cde-72f0-91f9-9fa00b55aeb7
+  spec_id: STORY-20
+  agreed_id: STORY-20
+  title: 'Plug-in packaging: install into any aida project + deployment story'
+  description: ''
+  status: Approved
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T07:07:29.374905446Z
+  modified_at: 2026-05-24T07:07:29.374905446Z
+  req_type: Story
+  tags:
+  - deployment
+  - packaging
+  - parent:EPIC-16
+  - plug-in
 - id: 019e242d-1e5a-7622-aa8e-beda8aebb00a
   spec_id: STORY-12
   agreed_id: STORY-12
@@ -362,6 +531,38 @@ requirements:
   - rel_type: Child
     target_id: 019e2411-7b21-7b61-8e66-9f747a2db659
     created_at: 2026-05-14T01:20:06.117494734Z
+- id: 019e5aa4-38f0-78e3-b2fb-5cc637c69228
+  spec_id: STORY-25
+  agreed_id: STORY-25
+  title: 'aida-chat feedback loop 5: chat → trace gap detection'
+  description: 'Periodically scan project for // trace: comments and ask LLM ''does this code still implement what SPEC-X describes?'' Surfaces code↔spec drift. Offer batch actions: update SPEC, add comment flagging drift, or file follow-up TASK. Most-substrate-aware of the five loops. trace:EPIC-16'
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T15:39:32.464806097Z
+  modified_at: 2026-05-24T15:39:32.464806097Z
+  req_type: Story
+  tags:
+  - batch:aida-chat-feedback-loops
+  - epic:EPIC-16
+- id: 019e58cf-6a74-74d1-a249-2718043ce495
+  spec_id: STORY-19
+  agreed_id: STORY-19
+  title: MCP-first integration contract; CLI + file fallback
+  description: ''
+  status: Approved
+  priority: Medium
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T07:07:28.756084583Z
+  modified_at: 2026-05-24T07:07:28.756084583Z
+  req_type: Story
+  tags:
+  - integration-contract
+  - mcp
+  - parent:EPIC-16
+  - plug-in
 - id: 019e242d-1482-7941-92fb-f9dc327219b5
   spec_id: STORY-11
   agreed_id: STORY-11
@@ -382,6 +583,67 @@ requirements:
   - rel_type: Child
     target_id: 019e242c-c207-7270-89bc-80514bff4b3d
     created_at: 2026-05-14T01:49:55.209181617Z
+- id: 019e5aa3-d9f5-7ce0-9fc5-c1b0f4752b4f
+  spec_id: STORY-22
+  agreed_id: STORY-22
+  title: 'aida-chat feedback loop 2: chat → new task/bug (pre-filled aida add)'
+  description: When the chat surfaces friction with no existing SPEC, offer 'file as TASK' or 'file as BUG' with title + description + suggested parent. One-click executes 'aida add' with the prefilled args. Spec ID returned and shown inline. trace:EPIC-16
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T15:39:08.149752821Z
+  modified_at: 2026-05-24T15:39:08.149752821Z
+  req_type: Story
+  tags:
+  - batch:aida-chat-feedback-loops
+  - epic:EPIC-16
+- id: 019e5aa4-02e6-7771-9641-4e78b53abc9d
+  spec_id: STORY-23
+  agreed_id: STORY-23
+  title: 'aida-chat feedback loop 3: chat → memory write'
+  description: When the chat surfaces a pattern, principle, or correction worth preserving across sessions, offer 'save as memory'. Pre-fill memory frontmatter and body from the conversation. Write to ~/.claude/projects/<slug>/memory/, add MEMORY.md index entry, show path + link. trace:EPIC-16
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T15:39:18.630304019Z
+  modified_at: 2026-05-24T15:39:18.630304019Z
+  req_type: Story
+  tags:
+  - batch:aida-chat-feedback-loops
+  - epic:EPIC-16
+- id: 019e58cf-682f-78a2-9e7d-4bde13de7be7
+  spec_id: STORY-18
+  agreed_id: STORY-18
+  title: Five virtuous-loop capture verbs (chat → comment/task/memory/plan/trace-finding)
+  description: ''
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T07:07:28.175249307Z
+  modified_at: 2026-05-24T07:07:28.175249307Z
+  req_type: Story
+  tags:
+  - capture-verbs
+  - feedback-loop
+  - parent:EPIC-16
+- id: 019e5aa3-ad0b-7760-a9ec-ef7b61424e6a
+  spec_id: STORY-21
+  agreed_id: STORY-21
+  title: 'aida-chat feedback loop 1: chat → spec comment (aida comment add)'
+  description: When the chat surfaces discussion of an existing SPEC (model references its ID), offer a one-click action to capture the discussion as 'aida comment add <ID> <summary>'. Pre-fill the summary from the relevant message turns. After execution, show the new comment inline so the user sees the substrate growing. trace:EPIC-16
+  status: Approved
+  priority: High
+  owner: ''
+  feature: Uncategorized
+  created_at: 2026-05-24T15:38:56.651524973Z
+  modified_at: 2026-05-24T15:38:56.651524973Z
+  req_type: Story
+  tags:
+  - batch:aida-chat-feedback-loops
+  - epic:EPIC-16
 - id: 019e242d-28be-7ae0-9718-eb506e5a9610
   spec_id: STORY-13
   agreed_id: STORY-13
