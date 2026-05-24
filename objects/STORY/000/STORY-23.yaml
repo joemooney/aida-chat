@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:18.630304019Z
-modified_at: 2026-05-24T22:06:41.961471447Z
+modified_at: 2026-05-24T22:07:54.762763525Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -19,3 +19,8 @@ comments:
   content: 'Codex backend implementation note: added write_memory tool in src/server/tools/memory.rs plus POST /api/sessions/:id/memory endpoint and shared MemoryRequest/MemoryResponse types. Writes are confined to ~/.claude/projects/<slug>/memory/ where slug is derived from canonical cfg.repo_root; name validation rejects path escapes and .md suffix; duplicate memory files are rejected; MEMORY.md index is atomically updated with replace-not-duplicate semantics. Verification: cargo test --features ssr --lib passed 44/44. Manual curl smoke wrote story-23-smoke-* to /home/joe/.claude/projects/-home-joe-ai-aida-chat/memory/, verified frontmatter + MEMORY.md line, verified duplicate write returned 400, then removed the test file and index line. STORY-23 intentionally remains In Progress until frontend lands per brief.'
   created_at: 2026-05-24T22:06:41.961471447Z
   modified_at: 2026-05-24T22:06:41.961471447Z
+- id: 019e5c07-c98a-7f92-b0b9-2dc7068b9189
+  author: joe
+  content: 'Codex opened backend PR #6: https://github.com/joemooney/aida-chat/pull/6 at commit 5b2e1fa ([AI:codex] feat(aida): add chat → memory write tool + endpoint (STORY-23)). STORY-23 remains In Progress pending frontend integration.'
+  created_at: 2026-05-24T22:07:54.762763525Z
+  modified_at: 2026-05-24T22:07:54.762763525Z
