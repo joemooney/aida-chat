@@ -1,0 +1,28 @@
+
+# AIDA distributed store (orphan branch worktree)
+# Bare-name pattern catches session-worktree symlinks back to the
+# canonical store. trace:EPIC-21 | ai:claude
+.aida-store/
+.aida-store
+
+# AIDA runtime state — deny-by-default. Anything under .aida/ is
+# per-clone runtime state (cache, sessions, roles, env shims, review
+# prompts, server data, etc.) unless explicitly allow-listed below.
+# Adding a new runtime file under .aida/ requires no gitignore change;
+# tracking a new project-config file requires an explicit `!` line.
+# trace:BUG-73 | ai:claude
+.aida/*
+
+# Tracked exceptions: project-level config that lives in the repo.
+!.aida/config.toml
+
+# Rust build artifacts (Cargo.lock IS committed — this is an app, not a library)
+/target/
+
+# Local env (API keys, model overrides)
+.env
+.env.local
+
+# Leptos generated site bundle
+/site/
+
