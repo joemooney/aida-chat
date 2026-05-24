@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-24T15:30:07.847497361Z
+modified_at: 2026-05-24T15:46:43.100009329Z
 req_type: Epic
 tags:
 - first-consumer
@@ -53,3 +53,34 @@ comments:
     — master advisor (from aida repo, dispatching to aida-chat substrate)
   created_at: 2026-05-24T15:30:07.847497361Z
   modified_at: 2026-05-24T15:30:07.847497361Z
+- id: 019e5aaa-cb1c-76f0-b449-afa636074f54
+  author: joe
+  content: |-
+    Master verdict on Codex-1's implementation report (EPIC-16 PR 1 — MCP-first + trace/citation, +212/-24, 15/15 tests, live smoke passed):
+
+    APPROVE — ready to commit, with TWO MUST-CONFIRM items first.
+
+    **Must-confirm before commit:**
+
+    1. **MCP subprocess CWD targeting.** Confirm the spawned 'aida mcp-serve' subprocess uses 'cwd = ServerConfig.repo_root', NOT the aida-chat process's CWD. This is load-bearing: if mcp-serve runs in aida-chat's directory, it queries aida-chat's substrate instead of the target project's. The OVERVIEW.md vision is 'scoped chat UI you can point at ANY project'; this only works if MCP targets the right substrate. Verify in src/server/mcp/client.rs's subprocess spawn — Command::new('aida').arg('mcp-serve').current_dir(&config.repo_root).
+
+    2. **MCP server respawn after subprocess death.** The report says 'reader task clears the inbox on EOF so waiters unblock with Closed rather than Timeout' — death-detection works. But: does the OnceCell get REPLACED so the NEXT tool call respawns a fresh subprocess? Or is MCP permanently disabled for the rest of the aida-chat process lifetime once the first subprocess dies? The fallback to CLI works (good), but a transient mcp-serve crash shouldn't permanently degrade the chat session. Policy: if the singleton's reader signals Closed AND the subprocess is dead (try_wait returns Some), replace the OnceCell value via a Mutex<Option<Arc<McpClient>>> swap before serving the next tool call. State the chosen policy in mcp/mod.rs doc-comment.
+
+    **Approve as-shipped:**
+
+    - Custom ~200 LOC JSON-RPC 2.0 stdio client (no rmcp dep) — correct substrate-discipline call
+    - OnceCell + lazy spawn + kill_on_drop(true) — right primitives
+    - Per-id oneshot routing — clean
+    - MCP-first with CLI fallback via McpError::Unavailable sentinel — right shape
+    - aida_resource (list|read) — correct tool surface
+    - find_traces regex empirically validated (EPIC-1 in 4 files, EPIC-16 in 5, STORY-3 in 7 including multi-ID positions) — approved
+    - aida_history CLI-only with brief-vs-reality note — correct; master filed TASK-538 on AIDA core to add MCP history tool so aida-chat can drop the CLI fallback later
+    - System prompt update + tool hints — matches plan
+    - mcp_smoke.rs + traces_smoke.rs — bonus, keep them
+    - Test coverage (8 new + 7 existing = 15/15) — adequate
+
+    **Commit when items 1 + 2 confirmed.** Trailer: (EPIC-16). Then 'aida brief ack .aida/agent-briefs/codex/EPIC-16-2026-05-24T152433Z.md' and open PR. Five follow-up STORYs (STORY-21..STORY-25) are filed in aida-chat substrate for the feedback loops — leave them for follow-up PRs, don't expand PR 1.
+
+    — master advisor
+  created_at: 2026-05-24T15:46:43.100009329Z
+  modified_at: 2026-05-24T15:46:43.100009329Z
