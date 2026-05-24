@@ -12,7 +12,7 @@ use leptos_router::path;
 
 use crate::messages::{ChatTurn, Role, ToolCallSummary};
 #[cfg(feature = "hydrate")]
-use crate::messages::{ChatHistory, CommentResponse};
+use crate::messages::{ChatHistory, CommentResponse, SpecResponse};
 
 // trace:STORY-21 | ai:claude
 //
@@ -50,6 +50,44 @@ pub fn is_valid_spec_id(s: &str) -> bool {
         return b[pb.len() + 1..].iter().all(|c| c.is_ascii_digit());
     }
     false
+}
+
+// trace:STORY-22 | ai:claude
+//
+// Title heuristic for the new-SPEC capture form: take the first
+// sentence (`.`, `!`, `?`, or newline-terminated), trimmed; if it
+// exceeds `max_len` chars, truncate at the nearest preceding word
+// boundary and append `…`. Empty input gives an empty title — the
+// user fills it in manually.
+pub fn extract_first_sentence_title(body: &str, max_len: usize) -> String {
+    let trimmed = body.trim_start();
+    let end_byte = trimmed
+        .char_indices()
+        .find(|(_, c)| matches!(c, '.' | '!' | '?' | '\n'))
+        .map(|(i, _)| i)
+        .unwrap_or(trimmed.len());
+    let first = trimmed[..end_byte].trim();
+    if first.chars().count() <= max_len {
+        return first.to_string();
+    }
+    // Find the byte index at exactly `max_len` chars in.
+    let mut cap_byte = first.len();
+    for (i, (byte_idx, _)) in first.char_indices().enumerate() {
+        if i == max_len {
+            cap_byte = byte_idx;
+            break;
+        }
+    }
+    let prefix = &first[..cap_byte];
+    // Prefer a word boundary — but only if there's whitespace within the
+    // last 20 chars, so we don't collapse "OneVeryLongUnbrokenString" to "".
+    if let Some(last_space) = prefix.rfind(char::is_whitespace) {
+        let after_space = &prefix[..last_space];
+        if after_space.chars().count() + 20 >= max_len {
+            return format!("{after_space}…");
+        }
+    }
+    format!("{prefix}…")
 }
 
 /// First substring matching `\b(EPIC|STORY|TASK|BUG|FR|ADR|SPIKE)-\d+\b`
@@ -370,10 +408,19 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         }
     };
     let capture_view = match turn.role {
-        // trace:STORY-21 | ai:claude
-        // Comment-capture affordance — only Assistant messages get the
-        // "Save as comment" trigger.
-        Role::Assistant => Some(view! { <CommentCapture body_text=turn.text session_id=session_id/> }),
+        // trace:STORY-21 STORY-22 | ai:claude
+        // Capture affordances — only Assistant messages get them. The
+        // two components are deliberately rendered side-by-side without
+        // a shared abstraction: STORY-23 will give the third data point
+        // and a clearer factoring.
+        Role::Assistant => {
+            let body_for_comment = turn.text.clone();
+            let body_for_spec = turn.text;
+            Some(view! {
+                <CommentCapture body_text=body_for_comment session_id=session_id/>
+                <SpecCapture body_text=body_for_spec session_id=session_id/>
+            })
+        }
         Role::User => None,
     };
     view! {
@@ -584,6 +631,202 @@ fn schedule_clear(set_badge_msg: WriteSignal<Option<String>>) {
 #[allow(dead_code)]
 fn schedule_clear(_set_badge_msg: WriteSignal<Option<String>>) {}
 
+// trace:STORY-22 | ai:claude
+//
+// Inline new-SPEC capture form. Parallel to CommentCapture: same
+// StoredValue trick for re-prime, same `<Show>` gating, same badge
+// fade. Deliberately not factored against CommentCapture yet — wait
+// for STORY-23 to choose the right shared abstraction.
+#[component]
+fn SpecCapture(
+    /// Assistant message body — used to pre-populate title + description.
+    body_text: String,
+    session_id: ReadSignal<Option<String>>,
+) -> impl IntoView {
+    let initial_title = extract_first_sentence_title(&body_text, 80);
+    let body_sv = StoredValue::new(body_text);
+    let initial_title_sv = StoredValue::new(initial_title);
+
+    let (is_open, set_is_open) = signal(false);
+    let (spec_type, set_spec_type) = signal("task".to_string());
+    let (title, set_title) = signal(initial_title_sv.get_value());
+    let (description, set_description) = signal(body_sv.get_value());
+    let (submitting, set_submitting) = signal(false);
+    let (error_msg, set_error_msg) = signal::<Option<String>>(None);
+    let (badge_msg, set_badge_msg) = signal::<Option<String>>(None);
+
+    view! {
+        <Show when=move || !is_open.get() && badge_msg.get().is_none()>
+            <div class="actions">
+                <button
+                    class="action-btn"
+                    on:click=move |_| {
+                        set_spec_type.set("task".to_string());
+                        set_title.set(initial_title_sv.get_value());
+                        set_description.set(body_sv.get_value());
+                        set_error_msg.set(None);
+                        set_is_open.set(true);
+                    }
+                    disabled=move || session_id.get().is_none()
+                    title="Create a new AIDA requirement from this message"
+                >
+                    "Create as new SPEC"
+                </button>
+            </div>
+        </Show>
+        <Show when=move || badge_msg.get().is_some()>
+            <div class="capture-badge">
+                {move || badge_msg.get().unwrap_or_default()}
+            </div>
+        </Show>
+        <Show when=move || is_open.get()>
+            <div class="comment-form">
+                <label class="comment-row">
+                    <span class="comment-label">"Type"</span>
+                    <select
+                        class="spec-type-select"
+                        on:change=move |ev| set_spec_type.set(event_target_value(&ev))
+                        prop:value=move || spec_type.get()
+                    >
+                        <option value="task">"task"</option>
+                        <option value="bug">"bug"</option>
+                        <option value="story">"story"</option>
+                        <option value="epic">"epic"</option>
+                        <option value="spike">"spike"</option>
+                    </select>
+                </label>
+                <label class="comment-row">
+                    <span class="comment-label">"Title"</span>
+                    <input
+                        class="spec-title-input"
+                        prop:value=move || title.get()
+                        on:input=move |ev| set_title.set(event_target_value(&ev))
+                        maxlength="200"
+                        placeholder="Short, descriptive title"
+                    />
+                </label>
+                <label class="comment-row">
+                    <span class="comment-label">"Description"</span>
+                    <textarea
+                        class="comment-text"
+                        prop:value=move || description.get()
+                        on:input=move |ev| set_description.set(event_target_value(&ev))
+                        rows="6"
+                    />
+                </label>
+                <Show when=move || error_msg.get().is_some()>
+                    <div class="comment-error">
+                        {move || error_msg.get().unwrap_or_default()}
+                    </div>
+                </Show>
+                <div class="comment-actions">
+                    <button
+                        class="save-btn"
+                        on:click=move |_| save_spec(
+                            session_id,
+                            spec_type,
+                            title,
+                            description,
+                            submitting,
+                            set_submitting,
+                            set_is_open,
+                            set_error_msg,
+                            set_badge_msg,
+                        )
+                        disabled=move || submitting.get()
+                    >
+                        {move || if submitting.get() { "Saving…" } else { "Save" }}
+                    </button>
+                    <button
+                        class="cancel-btn"
+                        on:click=move |_| {
+                            set_is_open.set(false);
+                            set_error_msg.set(None);
+                        }
+                        disabled=move || submitting.get()
+                    >
+                        "Cancel"
+                    </button>
+                </div>
+            </div>
+        </Show>
+    }
+}
+
+// trace:STORY-22 | ai:claude
+//
+// Save handler for SpecCapture. Parallel to save_comment — kept
+// separate intentionally.
+#[allow(clippy::too_many_arguments)]
+fn save_spec(
+    session_id: ReadSignal<Option<String>>,
+    spec_type: ReadSignal<String>,
+    title: ReadSignal<String>,
+    description: ReadSignal<String>,
+    submitting: ReadSignal<bool>,
+    set_submitting: WriteSignal<bool>,
+    set_is_open: WriteSignal<bool>,
+    set_error_msg: WriteSignal<Option<String>>,
+    set_badge_msg: WriteSignal<Option<String>>,
+) {
+    if submitting.get_untracked() {
+        return;
+    }
+    let type_field = spec_type.get_untracked();
+    let title_field = title.get_untracked().trim().to_string();
+    let desc_field = description.get_untracked();
+    if title_field.is_empty() {
+        set_error_msg.set(Some("Title is required.".into()));
+        return;
+    }
+    if desc_field.trim().is_empty() {
+        set_error_msg.set(Some("Description is required.".into()));
+        return;
+    }
+    let Some(sid) = session_id.get_untracked() else {
+        set_error_msg.set(Some("Session not ready yet.".into()));
+        return;
+    };
+    set_error_msg.set(None);
+    set_submitting.set(true);
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match post_spec(&sid, &type_field, &title_field, &desc_field).await {
+                Ok((spec_id, message)) => {
+                    set_submitting.set(false);
+                    set_is_open.set(false);
+                    let badge_text = if !spec_id.trim().is_empty() {
+                        format!("Created {}", spec_id.trim())
+                    } else if !message.trim().is_empty() {
+                        message
+                    } else {
+                        "Created (backend returned no SPEC-ID)".into()
+                    };
+                    set_badge_msg.set(Some(badge_text));
+                    schedule_clear(set_badge_msg);
+                }
+                Err(err) => {
+                    set_submitting.set(false);
+                    set_error_msg.set(Some(err));
+                }
+            }
+        });
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            sid,
+            type_field,
+            title_field,
+            desc_field,
+            set_badge_msg,
+            set_is_open,
+        );
+        set_submitting.set(false);
+    }
+}
+
 #[component]
 fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
     let status = if call.ok { "ok" } else { "err" };
@@ -671,6 +914,79 @@ mod spec_id_tests {
         for s in ["EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2"] {
             assert!(is_valid_spec_id(s), "{s:?} should be valid");
         }
+    }
+
+    // trace:STORY-22 | ai:claude
+    use super::extract_first_sentence_title;
+
+    #[test]
+    fn title_heuristic_takes_first_sentence() {
+        assert_eq!(
+            extract_first_sentence_title("Fix the login bug. There's more context after.", 80),
+            "Fix the login bug"
+        );
+        assert_eq!(
+            extract_first_sentence_title("How do I add auth?\nLong follow-up here.", 80),
+            "How do I add auth"
+        );
+        assert_eq!(
+            extract_first_sentence_title("Done!\nMore details.", 80),
+            "Done"
+        );
+        // Newline before any terminator → first line.
+        assert_eq!(
+            extract_first_sentence_title("first line\nsecond line", 80),
+            "first line"
+        );
+    }
+
+    #[test]
+    fn title_heuristic_returns_whole_body_when_no_terminator() {
+        assert_eq!(
+            extract_first_sentence_title("Just a fragment with no terminator", 80),
+            "Just a fragment with no terminator"
+        );
+        assert_eq!(extract_first_sentence_title("", 80), "");
+        assert_eq!(extract_first_sentence_title("   ", 80), "");
+    }
+
+    #[test]
+    fn title_heuristic_caps_at_max_len_with_word_boundary() {
+        // Sentence longer than max_len → truncate at a word boundary with `…`.
+        let body = "This is a fairly long sentence that should be truncated near the cap";
+        let out = extract_first_sentence_title(body, 30);
+        assert!(out.ends_with('…'), "expected ellipsis on {out:?}");
+        // Character count of the visible prefix (excluding `…`) should be ≤ 30.
+        let visible = &out[..out.len() - "…".len()];
+        assert!(
+            visible.chars().count() <= 30,
+            "{out:?} has {} visible chars",
+            visible.chars().count()
+        );
+        // Truncated at a word boundary (no trailing partial word).
+        assert!(
+            !visible.ends_with(|c: char| c.is_ascii_alphanumeric())
+                || visible.split_whitespace().count() >= 2,
+            "should break on whitespace: {out:?}"
+        );
+    }
+
+    #[test]
+    fn title_heuristic_falls_back_to_hard_cut_for_unbroken_strings() {
+        // No whitespace → can't break on a word boundary, so hard-cut.
+        let body = "OneVeryLongUnbrokenStringThatExceedsTheLimit";
+        let out = extract_first_sentence_title(body, 10);
+        assert!(out.ends_with('…'), "{out:?}");
+        let visible = &out[..out.len() - "…".len()];
+        assert_eq!(visible.chars().count(), 10);
+    }
+
+    #[test]
+    fn title_heuristic_strips_leading_whitespace_and_trims() {
+        assert_eq!(
+            extract_first_sentence_title("   Hello world.   ", 80),
+            "Hello world"
+        );
     }
 
     #[test]
@@ -844,6 +1160,71 @@ async fn post_comment(session_id: &str, spec_id: &str, text: &str) -> Result<Str
     }
     if (200..300).contains(&status) {
         Ok(body_text)
+    } else {
+        Err(format!("HTTP {status}: {}", body_text.trim()))
+    }
+}
+
+// trace:STORY-22 | ai:claude
+//
+// POST /api/sessions/{session_id}/spec with {type, title, description}.
+// Returns (spec_id, message) on Ok; user-facing error string on Err.
+// Matches the contract:
+//   200 {"ok": true, "spec_id": "BUG-378", "message": "..."}
+//   400|500 {"ok": false, "error": "..."}
+#[cfg(feature = "hydrate")]
+async fn post_spec(
+    session_id: &str,
+    spec_type: &str,
+    title: &str,
+    description: &str,
+) -> Result<(String, String), String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{Headers, Request, RequestInit, Response};
+
+    let body = serde_json::to_string(&crate::messages::SpecRequest {
+        r#type: spec_type.to_string(),
+        title: title.to_string(),
+        description: description.to_string(),
+    })
+    .map_err(|e| format!("encode: {e}"))?;
+    let headers = Headers::new().map_err(|e| format!("headers: {e:?}"))?;
+    headers
+        .set("content-type", "application/json")
+        .map_err(|e| format!("set header: {e:?}"))?;
+
+    let opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_headers(&headers);
+    opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
+
+    let url = format!("/api/sessions/{session_id}/spec");
+    let req = Request::new_with_str_and_init(&url, &opts)
+        .map_err(|e| format!("request init: {e:?}"))?;
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_value = JsFuture::from(window.fetch_with_request(&req))
+        .await
+        .map_err(|e| format!("fetch: {e:?}"))?;
+    let resp: Response = resp_value.dyn_into().map_err(|_| "not a response")?;
+    let status = resp.status();
+    let text_promise = resp.text().map_err(|e| format!("text: {e:?}"))?;
+    let body_text = JsFuture::from(text_promise)
+        .await
+        .map_err(|e| format!("text await: {e:?}"))?
+        .as_string()
+        .unwrap_or_default();
+    if let Ok(parsed) = serde_json::from_str::<SpecResponse>(&body_text) {
+        if parsed.ok {
+            return Ok((
+                parsed.spec_id.unwrap_or_default(),
+                parsed.message.unwrap_or_default(),
+            ));
+        }
+        return Err(parsed.error.unwrap_or_else(|| format!("HTTP {status}")));
+    }
+    if (200..300).contains(&status) {
+        Ok((String::new(), body_text))
     } else {
         Err(format!("HTTP {status}: {}", body_text.trim()))
     }

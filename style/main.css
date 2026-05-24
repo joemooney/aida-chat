@@ -391,3 +391,34 @@ html, body {
   85%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* --- STORY-22: new-SPEC capture affordance --- */
+/* Reuses .action-btn / .actions / .comment-form / .comment-row / .comment-label
+   / .comment-text / .comment-error / .comment-actions / .save-btn / .cancel-btn
+   / .capture-badge from STORY-21. STORY-23 will pick the abstraction. */
+.spec-type-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 13px;
+  max-width: 200px;
+  cursor: pointer;
+}
+.spec-type-select:focus { outline: none; border-color: var(--accent); }
+.spec-title-input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+}
+.spec-title-input:focus { outline: none; border-color: var(--accent); }
+/* Pull the two adjacent capture-affordance rows visually together — the
+   STORY-21 button + STORY-22 button stack with no double-gap. */
+.actions + .actions { margin-top: 2px; }
