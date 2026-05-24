@@ -8,8 +8,14 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:08.149752821Z
-modified_at: 2026-05-24T19:45:40.129528748Z
+modified_at: 2026-05-24T19:45:59.779341631Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
 - epic:EPIC-16
+comments:
+- id: 019e5b85-dbe3-72a3-8bdc-0ed8978aea96
+  author: joe
+  content: 'Implementation note: STORY-22 backend added aida_add tool and POST /api/sessions/:id/spec endpoint using shared SpecRequest/SpecResponse in crate::messages. Live MCP add_requirement was smoke-tested first: tools/list advertises add_requirement(type,title,description,status), but the call returned success with SPEC-007 while aida search found no persisted requirement. Product write path is CLI-only via aida add until that upstream BUG-377-class behavior is fixed. Verification: cargo test --features ssr --lib passed 18/18; cargo run --example mcp_smoke --features ssr passed and documents the MCP persistence gap; HTTP smoke verified bad type 400 and valid create 200 with parsed BUG-28, then deleted the smoke spec.'
+  created_at: 2026-05-24T19:45:59.779341631Z
+  modified_at: 2026-05-24T19:45:59.779341631Z
