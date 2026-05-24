@@ -3,12 +3,12 @@ spec_id: STORY-21
 agreed_id: STORY-21
 title: 'aida-chat feedback loop 1: chat → spec comment (aida comment add)'
 description: When the chat surfaces discussion of an existing SPEC (model references its ID), offer a one-click action to capture the discussion as 'aida comment add <ID> <summary>'. Pre-fill the summary from the relevant message turns. After execution, show the new comment inline so the user sees the substrate growing. trace:EPIC-16
-status: Done
+status: InProgress
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:38:56.651524973Z
-modified_at: 2026-05-24T18:13:00.252994949Z
+modified_at: 2026-05-24T19:10:42.069472562Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
