@@ -1,0 +1,17 @@
+id: 019e58cf-6a74-74d1-a249-2718043ce495
+spec_id: STORY-19
+agreed_id: STORY-19
+title: MCP-first integration contract; CLI + file fallback
+description: ''
+status: Approved
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T07:07:28.756084583Z
+modified_at: 2026-05-24T07:07:28.756084583Z
+req_type: Story
+tags:
+- integration-contract
+- mcp
+- parent:EPIC-16
+- plug-in
