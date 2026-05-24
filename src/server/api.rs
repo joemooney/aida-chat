@@ -20,7 +20,9 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
-use crate::messages::{ChatHistory, ChatTurn, CreateSessionResponse, Role, ServerInfo};
+use crate::messages::{
+    ChatHistory, ChatTurn, CreateSessionResponse, Role, ServerInfo, SpecRequest, SpecResponse,
+};
 use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
 use crate::server::config::{Backend, ServerConfig};
@@ -43,6 +45,7 @@ pub fn router(sessions: Arc<dyn SessionStore>, cfg: Arc<ServerConfig>) -> Router
         .route("/sessions", post(create_session))
         .route("/sessions/{id}/history", get(get_history))
         .route("/sessions/{id}/comment", post(add_comment))
+        .route("/sessions/{id}/spec", post(add_spec))
         .route("/chat", get(chat_stream))
         .layer(Extension(state))
 }
@@ -145,6 +148,56 @@ fn comment_error(status: StatusCode, error: String) -> (StatusCode, Json<Comment
         status,
         Json(CommentResponse {
             ok: false,
+            message: None,
+            error: Some(error),
+        }),
+    )
+}
+
+// trace:STORY-22 | ai:codex
+async fn add_spec(
+    Extension(state): Extension<ApiState>,
+    Path(id): Path<String>,
+    AxumJson(body): AxumJson<SpecRequest>,
+) -> (StatusCode, Json<SpecResponse>) {
+    if state.sessions.get(&id).await.is_none() {
+        return spec_error(StatusCode::NOT_FOUND, "unknown session_id".into());
+    }
+
+    match aida::aida_add(
+        &state.cfg,
+        &json!({
+            "type": body.req_type,
+            "title": body.title,
+            "description": body.description.unwrap_or_default(),
+        }),
+    )
+    .await
+    {
+        Ok(spec_id) => spec_ok(spec_id),
+        Err(ToolError::BadInput(e)) => spec_error(StatusCode::BAD_REQUEST, e),
+        Err(e) => spec_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn spec_ok(spec_id: String) -> (StatusCode, Json<SpecResponse>) {
+    (
+        StatusCode::OK,
+        Json(SpecResponse {
+            ok: true,
+            spec_id: Some(spec_id.clone()),
+            message: Some(format!("Created {spec_id}")),
+            error: None,
+        }),
+    )
+}
+
+fn spec_error(status: StatusCode, error: String) -> (StatusCode, Json<SpecResponse>) {
+    (
+        status,
+        Json(SpecResponse {
+            ok: false,
+            spec_id: None,
             message: None,
             error: Some(error),
         }),

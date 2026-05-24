@@ -138,6 +138,28 @@ pub fn aida_comment_add_spec() -> Tool {
     }
 }
 
+pub fn aida_add_spec() -> Tool {
+    Tool {
+        name: "aida_add",
+        description:
+            "Create a new AIDA requirement (task, bug, story, etc.) capturing work or \
+            a defect surfaced in the chat. Use only when the user signals 'file this' / \
+            'add a bug' / 'create a task' — substrate writes should be deliberate, not speculative.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["task", "bug", "story", "epic", "spike"]
+                },
+                "title": {"type": "string"},
+                "description": {"type": "string"}
+            },
+            "required": ["type", "title"]
+        }),
+    }
+}
+
 // --------------------------------------------------------------------------
 // Executors
 // --------------------------------------------------------------------------
@@ -297,6 +319,49 @@ pub async fn aida_comment_add(cfg: &ServerConfig, input: &Value) -> Result<Strin
     .await
 }
 
+// trace:STORY-22 | ai:codex
+pub async fn aida_add(cfg: &ServerConfig, input: &Value) -> Result<String, ToolError> {
+    let req_type = input
+        .get("type")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::BadInput("missing 'type'".into()))?;
+    let title = input
+        .get("title")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::BadInput("missing 'title'".into()))?;
+    let description = input
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    validate_add_input(req_type, title, description)?;
+
+    // Live AIDA 0.5.2 MCP add_requirement advertises add_requirement(type,
+    // title, description, status), but returns success without a CLI-visible
+    // persisted requirement in this repo. Use the CLI write path until that
+    // upstream BUG-377-class behavior is fixed.
+    let output = run_aida(
+        cfg,
+        &[
+            "add".into(),
+            "--type".into(),
+            req_type.to_string(),
+            "--title".into(),
+            title.to_string(),
+            "--description".into(),
+            description.to_string(),
+            "--status".into(),
+            "draft".into(),
+        ],
+    )
+    .await?;
+    parse_spec_id(&output).ok_or_else(|| {
+        ToolError::Execution(format!(
+            "aida add did not return a SPEC-ID: {}",
+            output.trim()
+        ))
+    })
+}
+
 // --------------------------------------------------------------------------
 // Transport helpers
 // --------------------------------------------------------------------------
@@ -388,6 +453,35 @@ fn validate_comment_input(spec_id: &str, text: &str) -> Result<(), ToolError> {
     Ok(())
 }
 
+fn validate_add_input(req_type: &str, title: &str, description: &str) -> Result<(), ToolError> {
+    if !matches!(req_type, "task" | "bug" | "story" | "epic" | "spike") {
+        return Err(ToolError::BadInput(format!(
+            "type must be one of task, bug, story, epic, spike: {req_type}"
+        )));
+    }
+    if title.trim().is_empty() {
+        return Err(ToolError::BadInput("title may not be empty".into()));
+    }
+    if title.chars().count() > 200 {
+        return Err(ToolError::BadInput(
+            "title may not exceed 200 characters".into(),
+        ));
+    }
+    if description.len() > 8 * 1024 {
+        return Err(ToolError::BadInput(
+            "description may not exceed 8 KiB".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn parse_spec_id(output: &str) -> Option<String> {
+    output
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+        .find(|token| is_spec_id(token) && token.chars().any(|c| c.is_ascii_digit()))
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,5 +516,27 @@ mod tests {
         assert!(validate_comment_input("story21", "save this note").is_err());
         assert!(validate_comment_input("STORY-21", "   ").is_err());
         assert!(validate_comment_input("STORY-21", &"x".repeat(8 * 1024 + 1)).is_err());
+    }
+
+    #[test]
+    fn add_validators() {
+        assert!(validate_add_input("bug", "valid title", "").is_ok());
+        assert!(validate_add_input("feature", "valid title", "").is_err());
+        assert!(validate_add_input("task", "   ", "").is_err());
+        assert!(validate_add_input("task", &"x".repeat(201), "").is_err());
+        assert!(validate_add_input("task", "valid title", &"x".repeat(8 * 1024 + 1)).is_err());
+    }
+
+    #[test]
+    fn parses_spec_id_from_aida_add_output() {
+        assert_eq!(
+            parse_spec_id("Added: BUG-378 - thing").as_deref(),
+            Some("BUG-378")
+        );
+        assert_eq!(
+            parse_spec_id("Created TASK-1-042 from branch").as_deref(),
+            Some("TASK-1-042")
+        );
+        assert!(parse_spec_id("no id here").is_none());
     }
 }

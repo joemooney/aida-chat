@@ -49,3 +49,25 @@ pub struct ServerInfo {
     /// Active backend label, e.g. "anthropic-api" or "claude-cli".
     pub backend: String,
 }
+
+/// `POST /api/sessions/:id/spec` request body (STORY-22).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecRequest {
+    #[serde(rename = "type")]
+    pub req_type: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// `POST /api/sessions/:id/spec` response body (STORY-22).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub spec_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub error: Option<String>,
+}
