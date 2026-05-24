@@ -1,0 +1,17 @@
+id: 019e58cf-6cde-72f0-91f9-9fa00b55aeb7
+spec_id: STORY-20
+agreed_id: STORY-20
+title: 'Plug-in packaging: install into any aida project + deployment story'
+description: ''
+status: Approved
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T07:07:29.374905446Z
+modified_at: 2026-05-24T07:07:29.374905446Z
+req_type: Story
+tags:
+- deployment
+- packaging
+- parent:EPIC-16
+- plug-in
