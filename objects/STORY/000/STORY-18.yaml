@@ -3,12 +3,12 @@ spec_id: STORY-18
 agreed_id: STORY-18
 title: Five virtuous-loop capture verbs (chat → comment/task/memory/plan/trace-finding)
 description: ''
-status: Approved
+status: Completed
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:07:28.175249307Z
-modified_at: 2026-05-24T07:07:28.175249307Z
+modified_at: 2026-05-24T20:42:57.839626524Z
 req_type: Story
 tags:
 - capture-verbs
