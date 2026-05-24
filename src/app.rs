@@ -12,7 +12,84 @@ use leptos_router::path;
 
 use crate::messages::{ChatTurn, Role, ToolCallSummary};
 #[cfg(feature = "hydrate")]
-use crate::messages::ChatHistory;
+use crate::messages::{ChatHistory, CommentResponse};
+
+// trace:STORY-21 | ai:claude
+//
+// SPEC-ID helpers used by the comment-capture affordance. Mirror the
+// brief's regex `\b(EPIC|STORY|TASK|BUG|FR|ADR|SPIKE)-\d+\b` without
+// pulling in a `regex` dependency (~500 KB of wasm).
+//
+// - `extract_first_spec_id` finds the first cited SPEC-ID in an
+//   assistant message so the form can pre-populate the field.
+// - `is_valid_spec_id` is exact-match validation for the field on submit.
+//
+// Backend re-validates definitively; these are UX guards.
+
+const SPEC_ID_PREFIXES: &[&str] = &["EPIC", "STORY", "TASK", "BUG", "FR", "ADR", "SPIKE"];
+
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+/// True iff `s` is exactly one valid SPEC-ID with a known prefix
+/// (PREFIX-digits, single segment per the brief's regex).
+pub fn is_valid_spec_id(s: &str) -> bool {
+    let b = s.as_bytes();
+    for &p in SPEC_ID_PREFIXES {
+        let pb = p.as_bytes();
+        if b.len() < pb.len() + 2 {
+            continue;
+        }
+        if &b[..pb.len()] != pb {
+            continue;
+        }
+        if b[pb.len()] != b'-' {
+            continue;
+        }
+        return b[pb.len() + 1..].iter().all(|c| c.is_ascii_digit());
+    }
+    false
+}
+
+/// First substring matching `\b(EPIC|STORY|TASK|BUG|FR|ADR|SPIKE)-\d+\b`
+/// in `text`. Returns `None` when no cited SPEC-ID is found.
+pub fn extract_first_spec_id(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        let boundary_before = i == 0 || !is_word_byte(bytes[i - 1]);
+        if boundary_before {
+            for &p in SPEC_ID_PREFIXES {
+                let pb = p.as_bytes();
+                if len < i + pb.len() + 2 {
+                    continue;
+                }
+                if &bytes[i..i + pb.len()] != pb {
+                    continue;
+                }
+                if bytes[i + pb.len()] != b'-' {
+                    continue;
+                }
+                let digit_start = i + pb.len() + 1;
+                let mut j = digit_start;
+                while j < len && bytes[j].is_ascii_digit() {
+                    j += 1;
+                }
+                if j == digit_start {
+                    continue; // no digits — not a valid SPEC-ID
+                }
+                let boundary_after = j == len || !is_word_byte(bytes[j]);
+                if boundary_after {
+                    return Some(text[i..j].to_string());
+                }
+            }
+        }
+        i += 1;
+    }
+    None
+}
 
 /// Render an assistant message's markdown body to safe-ish HTML.
 /// We strip raw HTML events from the markdown stream so the model
@@ -211,7 +288,7 @@ fn ChatPage() -> impl IntoView {
                 {move || {
                     turns.get()
                         .into_iter()
-                        .map(|turn| view! { <TurnView turn=turn/> })
+                        .map(|turn| view! { <TurnView turn=turn session_id=session_id/> })
                         .collect_view()
                 }}
                 <Show when=move || streaming.get()>
@@ -259,7 +336,7 @@ fn ChatPage() -> impl IntoView {
 }
 
 #[component]
-fn TurnView(turn: ChatTurn) -> impl IntoView {
+fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl IntoView {
     let role_class = match turn.role {
         Role::User => "user",
         Role::Assistant => "assistant",
@@ -288,18 +365,224 @@ fn TurnView(turn: ChatTurn) -> impl IntoView {
         // Assistant replies render markdown to HTML so tables, code
         // blocks, lists, headings, etc. look right.
         Role::Assistant => {
-            let html = render_markdown(&text);
+            let html = render_markdown(&turn.text);
             view! { <div class="text markdown" inner_html=html/> }.into_any()
         }
+    };
+    let capture_view = match turn.role {
+        // trace:STORY-21 | ai:claude
+        // Comment-capture affordance — only Assistant messages get the
+        // "Save as comment" trigger.
+        Role::Assistant => Some(view! { <CommentCapture body_text=turn.text session_id=session_id/> }),
+        Role::User => None,
     };
     view! {
         <div class=format!("turn {role_class}")>
             <div class="role">{role_label}</div>
             {tools_view}
             {body}
+            {capture_view}
         </div>
     }
 }
+
+// trace:STORY-21 | ai:claude
+//
+// Inline comment-capture form. Lives under each assistant message; click
+// "Save as comment" to expand, then POST to /api/sessions/:id/comment.
+// State is component-local — a new assistant turn arriving will rebuild
+// this component and reset the form, which is acceptable for STORY-21's
+// "capture an already-rendered message" flow.
+#[component]
+fn CommentCapture(
+    /// Assistant message body — used to pre-populate the text field.
+    body_text: String,
+    session_id: ReadSignal<Option<String>>,
+) -> impl IntoView {
+    let initial_spec_id = extract_first_spec_id(&body_text).unwrap_or_default();
+    // StoredValue is Copy, so the inline `on:click` handlers (which run
+    // multiple times across re-renders of <Show>) can capture these by
+    // move without consuming the underlying String.
+    let body_text_sv = StoredValue::new(body_text);
+    let initial_spec_id_sv = StoredValue::new(initial_spec_id);
+
+    let (is_open, set_is_open) = signal(false);
+    let (spec_id, set_spec_id) = signal(initial_spec_id_sv.get_value());
+    let (text, set_text) = signal(body_text_sv.get_value());
+    let (submitting, set_submitting) = signal(false);
+    let (error_msg, set_error_msg) = signal::<Option<String>>(None);
+    let (badge_msg, set_badge_msg) = signal::<Option<String>>(None);
+
+    view! {
+        <Show when=move || !is_open.get() && badge_msg.get().is_none()>
+            <div class="actions">
+                <button
+                    class="action-btn"
+                    on:click=move |_| {
+                        set_spec_id.set(initial_spec_id_sv.get_value());
+                        set_text.set(body_text_sv.get_value());
+                        set_error_msg.set(None);
+                        set_is_open.set(true);
+                    }
+                    disabled=move || session_id.get().is_none()
+                    title="Save this message as a comment on a SPEC-ID"
+                >
+                    "Save as comment"
+                </button>
+            </div>
+        </Show>
+        <Show when=move || badge_msg.get().is_some()>
+            <div class="capture-badge">
+                {move || badge_msg.get().unwrap_or_default()}
+            </div>
+        </Show>
+        <Show when=move || is_open.get()>
+            <div class="comment-form">
+                <label class="comment-row">
+                    <span class="comment-label">"SPEC-ID"</span>
+                    <input
+                        class="spec-id-input"
+                        prop:value=move || spec_id.get()
+                        on:input=move |ev| set_spec_id.set(event_target_value(&ev))
+                        placeholder="e.g. EPIC-16"
+                    />
+                </label>
+                <label class="comment-row">
+                    <span class="comment-label">"Comment"</span>
+                    <textarea
+                        class="comment-text"
+                        prop:value=move || text.get()
+                        on:input=move |ev| set_text.set(event_target_value(&ev))
+                        rows="5"
+                    />
+                </label>
+                <Show when=move || error_msg.get().is_some()>
+                    <div class="comment-error">
+                        {move || error_msg.get().unwrap_or_default()}
+                    </div>
+                </Show>
+                <div class="comment-actions">
+                    <button
+                        class="save-btn"
+                        on:click=move |_| save_comment(
+                            session_id,
+                            spec_id,
+                            text,
+                            submitting,
+                            set_submitting,
+                            set_is_open,
+                            set_error_msg,
+                            set_badge_msg,
+                        )
+                        disabled=move || submitting.get()
+                    >
+                        {move || if submitting.get() { "Saving…" } else { "Save" }}
+                    </button>
+                    <button
+                        class="cancel-btn"
+                        on:click=move |_| {
+                            set_is_open.set(false);
+                            set_error_msg.set(None);
+                        }
+                        disabled=move || submitting.get()
+                    >
+                        "Cancel"
+                    </button>
+                </div>
+            </div>
+        </Show>
+    }
+}
+
+// trace:STORY-21 | ai:claude
+//
+// Save-button handler factored out so the click closure stays small and
+// `Fn` even inside the `<Show>` re-render loop. All arguments are Copy
+// (signals + the StoredValue-backed widgets) so this can be called any
+// number of times.
+#[allow(clippy::too_many_arguments)]
+fn save_comment(
+    session_id: ReadSignal<Option<String>>,
+    spec_id: ReadSignal<String>,
+    text: ReadSignal<String>,
+    submitting: ReadSignal<bool>,
+    set_submitting: WriteSignal<bool>,
+    set_is_open: WriteSignal<bool>,
+    set_error_msg: WriteSignal<Option<String>>,
+    set_badge_msg: WriteSignal<Option<String>>,
+) {
+    if submitting.get_untracked() {
+        return;
+    }
+    let sid_field = spec_id.get_untracked().trim().to_string();
+    let text_field = text.get_untracked();
+    if !is_valid_spec_id(&sid_field) {
+        set_error_msg.set(Some(format!(
+            "Not a valid SPEC-ID. Expected one of {} followed by `-` and digits.",
+            SPEC_ID_PREFIXES.join("/")
+        )));
+        return;
+    }
+    if text_field.trim().is_empty() {
+        set_error_msg.set(Some("Comment text is empty.".into()));
+        return;
+    }
+    let Some(sid) = session_id.get_untracked() else {
+        set_error_msg.set(Some("Session not ready yet.".into()));
+        return;
+    };
+    set_error_msg.set(None);
+    set_submitting.set(true);
+    #[cfg(feature = "hydrate")]
+    {
+        let sid_field_owned = sid_field.clone();
+        leptos::task::spawn_local(async move {
+            match post_comment(&sid, &sid_field_owned, &text_field).await {
+                Ok(message) => {
+                    set_submitting.set(false);
+                    set_is_open.set(false);
+                    let badge_text = if message.trim().is_empty() {
+                        format!("Comment added to {sid_field_owned}")
+                    } else {
+                        message
+                    };
+                    set_badge_msg.set(Some(badge_text));
+                    schedule_clear(set_badge_msg);
+                }
+                Err(err) => {
+                    set_submitting.set(false);
+                    set_error_msg.set(Some(err));
+                }
+            }
+        });
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (sid, sid_field, text_field, set_badge_msg, set_is_open);
+        set_submitting.set(false);
+    }
+}
+
+/// Clear the success badge after a few seconds. Wasm-only — SSR doesn't
+/// run JS so the badge would just stay visible (harmless).
+#[cfg(feature = "hydrate")]
+fn schedule_clear(set_badge_msg: WriteSignal<Option<String>>) {
+    use wasm_bindgen::closure::Closure;
+    use wasm_bindgen::JsCast;
+    let Some(window) = web_sys::window() else { return };
+    let cb = Closure::<dyn FnMut()>::new(move || {
+        set_badge_msg.set(None);
+    });
+    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        cb.as_ref().unchecked_ref(),
+        3000,
+    );
+    cb.forget();
+}
+
+#[cfg(not(feature = "hydrate"))]
+#[allow(dead_code)]
+fn schedule_clear(_set_badge_msg: WriteSignal<Option<String>>) {}
 
 #[component]
 fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
@@ -315,6 +598,99 @@ fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
 // ---------------------------------------------------------------------------
 // Client-only helpers (only compiled into the wasm bundle)
 // ---------------------------------------------------------------------------
+
+// trace:STORY-21 | ai:claude
+#[cfg(test)]
+mod spec_id_tests {
+    use super::{extract_first_spec_id, is_valid_spec_id};
+
+    #[test]
+    fn extracts_first_cited_spec_id() {
+        let text = "I checked EPIC-16 and it depends on STORY-3.";
+        assert_eq!(extract_first_spec_id(text).as_deref(), Some("EPIC-16"));
+    }
+
+    #[test]
+    fn handles_every_known_prefix() {
+        for (input, expected) in [
+            ("see EPIC-1", "EPIC-1"),
+            ("see STORY-42 for context", "STORY-42"),
+            ("now TASK-7 lands", "TASK-7"),
+            ("BUG-103 was the regression", "BUG-103"),
+            ("FR-0042 is functional", "FR-0042"),
+            ("ADR-9 chose REST over RPC", "ADR-9"),
+            ("SPIKE-2 ran for 2 days", "SPIKE-2"),
+        ] {
+            assert_eq!(
+                extract_first_spec_id(input).as_deref(),
+                Some(expected),
+                "input was {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn returns_none_when_no_spec_id_cited() {
+        assert_eq!(extract_first_spec_id(""), None);
+        assert_eq!(extract_first_spec_id("just plain English here"), None);
+        assert_eq!(
+            extract_first_spec_id("Lowercase epic-16 should not match"),
+            None
+        );
+        assert_eq!(extract_first_spec_id("EPIC-"), None); // no digits
+        assert_eq!(extract_first_spec_id("HOOK-12"), None); // unknown prefix
+    }
+
+    #[test]
+    fn respects_word_boundaries() {
+        // No false match inside another word.
+        assert_eq!(extract_first_spec_id("RECEPIC-16"), None);
+        assert_eq!(extract_first_spec_id("EPIC-16abc"), None);
+        // Boundary at start of string.
+        assert_eq!(extract_first_spec_id("EPIC-1"), Some("EPIC-1".into()));
+        // Boundary at end of string.
+        assert_eq!(
+            extract_first_spec_id("(EPIC-1)").as_deref(),
+            Some("EPIC-1")
+        );
+        // Adjacent punctuation OK.
+        assert_eq!(
+            extract_first_spec_id("Reference: STORY-42, please."),
+            Some("STORY-42".into())
+        );
+    }
+
+    #[test]
+    fn extracts_when_id_is_inside_markdown_link() {
+        let s = "See [STORY-21](https://example.com/STORY-21) for details.";
+        assert_eq!(extract_first_spec_id(s).as_deref(), Some("STORY-21"));
+    }
+
+    #[test]
+    fn is_valid_spec_id_accepts_known_prefixes() {
+        for s in ["EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2"] {
+            assert!(is_valid_spec_id(s), "{s:?} should be valid");
+        }
+    }
+
+    #[test]
+    fn is_valid_spec_id_rejects_bad_shapes() {
+        for s in [
+            "",
+            "EPIC",
+            "EPIC-",
+            "epic-16",
+            "EPIC -16",
+            "EPIC-16 ",
+            "HOOK-1",
+            "EPIC-16-1", // multi-segment not in brief regex
+            "EPIC-16abc",
+            "(EPIC-16)",
+        ] {
+            assert!(!is_valid_spec_id(s), "{s:?} should be invalid");
+        }
+    }
+}
 
 #[cfg(feature = "hydrate")]
 fn local_storage_get(key: &str) -> Option<String> {
@@ -413,6 +789,64 @@ async fn fetch_history(session_id: &str) -> Result<ChatHistory, String> {
         .map_err(|e| format!("text await: {e:?}"))?;
     let s = text.as_string().ok_or("text not string")?;
     serde_json::from_str(&s).map_err(|e| format!("decode: {e}"))
+}
+
+// trace:STORY-21 | ai:claude
+//
+// POST /api/sessions/{session_id}/comment with {spec_id, text}. Returns
+// the success message (or stub message) on Ok, and a user-facing error
+// string on Err. Matches the contract:
+//   200 {"ok": true, "message": "..."}
+//   400|500 {"ok": false, "error": "..."}
+#[cfg(feature = "hydrate")]
+async fn post_comment(session_id: &str, spec_id: &str, text: &str) -> Result<String, String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{Headers, Request, RequestInit, Response};
+
+    let body = serde_json::to_string(&crate::messages::CommentRequest {
+        spec_id: spec_id.to_string(),
+        text: text.to_string(),
+    })
+    .map_err(|e| format!("encode: {e}"))?;
+    let headers = Headers::new().map_err(|e| format!("headers: {e:?}"))?;
+    headers
+        .set("content-type", "application/json")
+        .map_err(|e| format!("set header: {e:?}"))?;
+
+    let opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_headers(&headers);
+    opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
+
+    let url = format!("/api/sessions/{session_id}/comment");
+    let req = Request::new_with_str_and_init(&url, &opts)
+        .map_err(|e| format!("request init: {e:?}"))?;
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_value = JsFuture::from(window.fetch_with_request(&req))
+        .await
+        .map_err(|e| format!("fetch: {e:?}"))?;
+    let resp: Response = resp_value.dyn_into().map_err(|_| "not a response")?;
+    let status = resp.status();
+    let text_promise = resp.text().map_err(|e| format!("text: {e:?}"))?;
+    let body_text = JsFuture::from(text_promise)
+        .await
+        .map_err(|e| format!("text await: {e:?}"))?
+        .as_string()
+        .unwrap_or_default();
+    // Try the typed envelope first; fall back to the raw status + body on a
+    // backend that returns a non-conforming shape (e.g. a plain 500).
+    if let Ok(parsed) = serde_json::from_str::<CommentResponse>(&body_text) {
+        if parsed.ok {
+            return Ok(parsed.message.unwrap_or_default());
+        }
+        return Err(parsed.error.unwrap_or_else(|| format!("HTTP {status}")));
+    }
+    if (200..300).contains(&status) {
+        Ok(body_text)
+    } else {
+        Err(format!("HTTP {status}: {}", body_text.trim()))
+    }
 }
 
 #[cfg(feature = "hydrate")]

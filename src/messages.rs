@@ -71,3 +71,22 @@ pub struct SpecResponse {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub error: Option<String>,
 }
+
+/// `POST /api/sessions/:id/comment` request body (STORY-21).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommentRequest {
+    pub spec_id: String,
+    pub text: String,
+}
+
+/// `POST /api/sessions/:id/comment` response body (STORY-21).
+/// On success: `ok=true`, `message=Some(...)`. On failure: `ok=false`,
+/// `error=Some(...)`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommentResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub error: Option<String>,
+}
