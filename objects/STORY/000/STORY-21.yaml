@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:38:56.651524973Z
-modified_at: 2026-05-24T19:10:42.069472562Z
+modified_at: 2026-05-24T19:11:31.963794908Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -24,3 +24,40 @@ comments:
   content: 'Codex opened stacked PR #2 for STORY-21: https://github.com/joemooney/aida-chat/pull/2 (base codex/epic-16-mcp-foundation until EPIC-16 PR #1 lands). Commit d5f679a. Verification: cargo test --features ssr --lib passed 17/17; cargo run --example mcp_smoke --features ssr passed with documented MCP add_comment persistence defect; HTTP endpoint smoke verified agreed 400/200 JSON contract and temporary comment cleanup.'
   created_at: 2026-05-24T18:13:00.252994949Z
   modified_at: 2026-05-24T18:13:00.252994949Z
+- id: 019e5b66-4e7b-7cf1-8eee-dd5542ec8cf3
+  author: joe
+  content: |-
+    Advisor verdict on both halves of STORY-21:
+
+    **Status correction:** Codex closed their lease and marked Done after the backend landed (PR #2 at d5f679a). The spec body, though, calls out the UI affordance ("offer a one-click action to capture the discussion") as the actual user-facing surface — backend alone isn't the loop. Resetting to In Progress; will move to Done only when both PRs are merged.
+
+    **PR #2 (backend) — cleared.** Verified:
+    - 17/17 tests pass including new comment_add_validators
+    - HTTP smoke verified end-to-end (bad spec_id → 400; valid → 200; cleanup confirmed)
+    - Substrate-discipline call: PR appropriately falls back to CLI because MCP add_comment is broken (silent data loss — filed as cross-project BUG-377 in aida core)
+    - Anthropic backend tool list + system prompt updated to advertise the new tool
+
+    **Claude's frontend (uncommitted in worktree /home/joe/ai/aida-chat-story-21) — cleared to commit.** Verified:
+    - 23/23 tests pass including 7 new app::spec_id_tests (extraction, prefix coverage, word boundaries, markdown links, validator paths)
+    - Build green for ssr + hydrate (wasm) + cargo leptos
+    - Stub markers prominent (two comments calling out the stub + rationale)
+    - TurnView signature change propagated at the call site (no orphan)
+    - schedule_clear correctly gated cfg(feature="hydrate") with no-op SSR variant
+
+    **Contract compatibility — perfect match.** Codex and Claude independently arrived at compatible types:
+    - Both: `CommentRequest { spec_id: String, text: String }`
+    - Both: `CommentResponse { ok: bool, message: Option<String>, error: Option<String> }` with `skip_serializing_if = "Option::is_none"`
+    - One trivial cleanup at merge: Codex duplicated the structs locally in api.rs; should import from `crate::messages` (where Claude put them) before final merge.
+
+    **Integration plan:**
+    1. Operator merges PR #1 to master.
+    2. PR #2 rebases onto master (or operator changes its base ref to master in the GH UI; same diff either way), then merges.
+    3. Claude commits + opens frontend PR off master (now with PR #1 + PR #2 landed).
+    4. Frontend PR drops the stub route + stub fn (the contract is preserved, only the handler swaps).
+    5. Frontend PR merges; STORY-21 marked Done.
+
+    **Cross-project substrate gap filed:** BUG-377 in aida repo — MCP add_comment misroutes text to author field, silent data loss. Tagged aida-chat-blocker for visibility.
+
+    — aida-chat advisor
+  created_at: 2026-05-24T19:11:31.963794908Z
+  modified_at: 2026-05-24T19:11:31.963794908Z
