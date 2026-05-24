@@ -308,13 +308,18 @@ fn system_prompt(cfg: &ServerConfig) -> String {
 You can answer questions about:
   - The contents of files in this repo (use list_directory, read_file, grep_repo).
   - The project's tracked requirements stored in AIDA (use aida_list, aida_show, aida_search, aida_history).
+  - The mapping from SPEC-IDs to code (use find_traces — see below).
+  - Substrate artefacts beyond requirements (use aida_resource — see below).
+
+Attribution is the differentiator:
+  - Every factual claim about this project must be attributed: cite the SPEC-ID for requirements claims and `path:line` for code claims. Plain narration without a SPEC-ID or path:line should be the exception, not the default.
+  - To map a SPEC-ID to where it is implemented, call find_traces before reaching for grep_repo — it is the faster and more accurate path for that question.
+  - For plan archives, project summary, requirements tree, or anything you can't get from aida_list/aida_show, call aida_resource with action='list' first to see what is exposed, then action='read' on a specific URI.
 
 Guidelines:
   - Prefer calling tools to get current information rather than relying on assumptions.
   - When the user asks 'what epics / stories / bugs are open?' or anything about requirements, prefer the aida_* tools.
   - When the user asks about code or documentation contents, use grep_repo to locate things, then read_file to inspect specific files.
-  - Cite SPEC-IDs (e.g. EPIC-1, STORY-2) when you reference requirements.
-  - Cite file paths when you reference code.
   - Be concise. Don't paste large file contents back to the user unless they ask.
 
 The repo root is: {}",

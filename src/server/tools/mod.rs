@@ -7,6 +7,7 @@
 pub mod aida;
 pub mod fs;
 pub mod grep;
+pub mod traces;
 
 use serde_json::Value;
 use thiserror::Error;
@@ -37,10 +38,12 @@ pub fn all_tool_specs() -> Vec<Tool> {
         fs::read_file_spec(),
         fs::list_directory_spec(),
         grep::grep_repo_spec(),
+        traces::find_traces_spec(),
         aida::aida_list_spec(),
         aida::aida_show_spec(),
         aida::aida_search_spec(),
         aida::aida_history_spec(),
+        aida::aida_resource_spec(),
     ]
 }
 
@@ -55,10 +58,12 @@ pub async fn dispatch(
         "read_file" => fs::read_file(cfg, input).await,
         "list_directory" => fs::list_directory(cfg, input).await,
         "grep_repo" => grep::grep_repo(cfg, input).await,
+        "find_traces" => traces::find_traces(cfg, input).await,
         "aida_list" => aida::aida_list(cfg, input).await,
         "aida_show" => aida::aida_show(cfg, input).await,
         "aida_search" => aida::aida_search(cfg, input).await,
         "aida_history" => aida::aida_history(cfg, input).await,
+        "aida_resource" => aida::aida_resource(cfg, input).await,
         other => Err(ToolError::NotAllowed(format!("unknown tool {other}"))),
     }
 }
