@@ -1,0 +1,60 @@
+id: 019e5b00-7b2d-7c53-a5c2-6042b96593f9
+spec_id: EPIC-26
+agreed_id: EPIC-26
+title: 'Fast-response query routing: canned answers + skill-prompts + FAQ review loop'
+description: |-
+  ## Why
+
+  Operator goal (2026-05-24): speed is of the essence. The substrate-grounding wedge (EPIC-16) is necessary but not sufficient — if a substrate-grounded answer takes 15s while a generic chat answers in 2s, users will reach for the generic chat. Need a fast-path layer that turns repeating queries into instant or near-instant responses, *without* sacrificing substrate-grounding for the long-tail queries.
+
+  Two tiers of fast-path:
+
+  1. **Canned answers** — popular or starred questions get pre-computed responses served from a cache, bypassing the LLM entirely. Latency target: < 50ms cache hit.
+  2. **Skill-prompts** — well-defined prompts pre-bound to a known tool sequence (think Claude Code skills, but baked into aida-chat). User query triggers a focused single-pass execution rather than the generic multi-iteration agent loop. Latency target: 1-2s (one round-trip, no tool fan-out).
+
+  Generic agent loop stays the fallback for novel / long-tail queries.
+
+  ## Closed loop
+
+  The library of canned answers + skills is grown by an AI-assisted review session, not hand-curated. Workflow:
+
+  - Every user query gets logged (timestamp, session, response latency, optional star flag).
+  - Periodic `/aida-chat-review` slash workflow scans the log, ranks by frequency + stars, proposes new canned-or-skill candidates with draft entries.
+  - Operator approves / edits / rejects each candidate; approved entries land in the library.
+
+  ## Differentiation synergy
+
+  This composes with EPIC-16's substrate-grounding thesis: generic chat is slow AND ungrounded; aida-chat is fast (canned/skill) AND substrate-grounded. The killer demo becomes stronger — answer a substrate-grounded question *instantly* from cache, then answer a long-tail question slower-but-substrate-grounded via the full agent loop. Two-stage demo of the wedge.
+
+  ## Proposed decomposition (not yet filed as separate STORYs — awaiting operator validation)
+
+  - **A: Query log** — persist every query with metadata. Foundation; everything else depends on it.
+  - **B: Canned-answer matcher** — at request entry, match against {pattern → response}. Bypass LLM on hit. Initial: exact + simple fuzzy. Future: embedding similarity.
+  - **C: Skill registry** — library of {trigger, prompt, pre-bound tool sequence, optional cached context}. Skill-matched queries route through a single-pass executor, not the generic agent loop.
+  - **D: Periodic review workflow** — `/aida-chat-review` slash, ranks the log, proposes new canned/skill entries.
+  - **E: Star / upvote affordance** — chat UI lets operator flag a query+response as canonical; feeds the review pipeline.
+
+  ## Open questions for operator
+
+  - Priority relative to EPIC-16 follow-ups (STORY-21..25)? Day-1 plan is currently EPIC-16 PR-1 merge → STORY-21 → killer demo. Does this EPIC slide ahead of STORY-21, after, or in parallel?
+  - Latency targets? My assumption: canned < 50ms, skill 1-2s, generic agent loop "whatever it takes." Confirm or sharpen.
+  - Storage for the query log: own aida-chat-local SQLite, or fold into AIDA's substrate?
+
+  ## Out of scope (for this EPIC)
+
+  - Cross-installation FAQ sharing
+  - Multi-user star-voting (one-operator assumption matches current MVP)
+  - Auto-approval (every new canned/skill entry goes through operator review)
+status: Draft
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T17:20:18.733667723Z
+modified_at: 2026-05-24T17:20:18.733667723Z
+req_type: Epic
+tags:
+- canned-answers
+- faq
+- performance
+- skills
+- virtuous-loop
