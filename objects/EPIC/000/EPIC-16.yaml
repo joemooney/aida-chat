@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-24T17:30:53.108208438Z
+modified_at: 2026-05-24T19:41:39.625899128Z
 req_type: Epic
 tags:
 - first-consumer
@@ -166,3 +166,26 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-24T17:30:53.108208438Z
   modified_at: 2026-05-24T17:30:53.108208438Z
+- id: 019e5b81-e3a9-7a32-945b-aaf24b981ab3
+  author: joe
+  content: |-
+    Substrate-cleanup proposal for STORY-17, STORY-18, STORY-19 (per bootstrap doc's "after PR-1 lands, decide: subsume into EPIC-16's child set, or close as superseded").
+
+    Reading each:
+
+    **STORY-17 — "Substrate-grounded context assembly with source attribution" (Approved, High, parent:EPIC-16, no git linkage).**
+    This is the EPIC-16 thesis restated as a Story. Concretely, the work behind it is what PR-1 just shipped: system prompt update advising SPEC-ID + path:line citation, find_traces tool, MCP-grounded aida_* tools. **Proposed disposition: edit to Completed once PR-1 merges; add a comment pointing at commit c7c0393 + the system-prompt block in src/server/backends/anthropic.rs.**
+
+    **STORY-18 — "Five virtuous-loop capture verbs (chat → comment/task/memory/plan/trace-finding)" (Approved, High, parent:EPIC-16).**
+    This is literally the parent shape of STORY-21..25. STORY-21..25 are the same 5 verbs broken out as individual stories with concrete acceptance — that's the actual work. STORY-18 keeping a separate identity creates the "two specs for the same thing" failure mode CLAUDE.md warns against. **Proposed disposition: edit to Completed (or Rejected as "superseded by STORY-21..25") and add `aida rel add --from STORY-18 --to STORY-21 --type Parent` style links (one per verb) so the graph carries the relationship. Pick Completed over Rejected — STORY-18's intent IS being satisfied; just by 5 stories instead of 1.**
+
+    **STORY-19 — "MCP-first integration contract; CLI + file fallback" (Approved, Medium, parent:EPIC-16, mcp).**
+    This is exactly the architecture EPIC-16 PR-1 delivered: custom JSON-RPC MCP client, CLI fallback path via Unavailable/Closed/Timeout markers, doc-commented failure model. **Proposed disposition: edit to Completed once PR-1 merges; link commit c7c0393.**
+
+    Note none of the three have git linkage today — meaning no commit or trace comment ever pointed at them. Their work happened under EPIC-16's umbrella with traces directly to EPIC-16. The cleanup formalizes that the substrate has converged.
+
+    Operator confirms-or-overrides. I'll only execute the status edits + relationship links after PR-1 merges (so the trace from "Completed" status back to the merge commit is honest, not aspirational).
+
+    — aida-chat advisor
+  created_at: 2026-05-24T19:41:39.625899128Z
+  modified_at: 2026-05-24T19:41:39.625899128Z
