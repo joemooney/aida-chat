@@ -8,8 +8,14 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:18.630304019Z
-modified_at: 2026-05-24T22:00:27.488775281Z
+modified_at: 2026-05-24T22:06:41.961471447Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
 - epic:EPIC-16
+comments:
+- id: 019e5c06-ad29-71a1-8cf1-13ae896a1929
+  author: joe
+  content: 'Codex backend implementation note: added write_memory tool in src/server/tools/memory.rs plus POST /api/sessions/:id/memory endpoint and shared MemoryRequest/MemoryResponse types. Writes are confined to ~/.claude/projects/<slug>/memory/ where slug is derived from canonical cfg.repo_root; name validation rejects path escapes and .md suffix; duplicate memory files are rejected; MEMORY.md index is atomically updated with replace-not-duplicate semantics. Verification: cargo test --features ssr --lib passed 44/44. Manual curl smoke wrote story-23-smoke-* to /home/joe/.claude/projects/-home-joe-ai-aida-chat/memory/, verified frontmatter + MEMORY.md line, verified duplicate write returned 400, then removed the test file and index line. STORY-23 intentionally remains In Progress until frontend lands per brief.'
+  created_at: 2026-05-24T22:06:41.961471447Z
+  modified_at: 2026-05-24T22:06:41.961471447Z
