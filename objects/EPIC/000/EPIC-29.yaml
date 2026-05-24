@@ -1,0 +1,75 @@
+id: 019e5bfa-3402-7092-8456-56fb20cf2c5d
+spec_id: EPIC-29
+agreed_id: EPIC-29
+title: 'Agile query library: canned reports + AI-generated reusable artifacts + plug-in starter pack'
+description: |-
+  ## Why
+
+  AIDA's vocabulary is agile (epic / story / task / bug / sprint / blocked / etc.). Many user questions are themselves agile-shaped: "what's blocked", "show me sprint burndown", "what's the dependency graph for EPIC-N", "which stories changed this week". These have *deterministic answers* — there's no judgment for the LLM to add; the substrate has the data, the query just needs to run.
+
+  Three compounding wins from treating these as a first-class library instead of LLM-per-call:
+
+  1. **No LLM round-trip needed** for the common cases. Canned answer tier of [[EPIC-26]] applies directly. Sidesteps the Tier 1 rate limit (30k tokens/min) we just hit during killer-demo dry-run.
+  2. **Sidesteps MCP read-path bugs.** [[BUG-381]] (status filter on `list_requirements`) blocks the chat path today for "what's in progress?". A canned query backed by `aida list --status in-progress` (CLI) just works — no upstream dependency.
+  3. **AI-generated artifacts become infrastructure.** When the LLM does write a novel query (jq filter, mermaid graph spec, dot file, dashboard fragment), saving the artifact back to the library means it runs from cache forever after. Generic chat answers a question once per query; aida-chat answers it once and the answer becomes infrastructure.
+
+  ## Differentiation lift
+
+  Every query that graduates to canned = one less generic-LLM-eligible question. Every artifact saved = one less per-session token spend. The library compounds value over the project's lifetime; generic chat starts from zero each session.
+
+  ## Composes with
+
+  - **[[EPIC-26]]** — skill registry + canned matcher mechanics. This EPIC is the first concrete *domain application* of EPIC-26's general framework.
+  - **[[STORY-20]]** — plug-in packaging. The starter library ships with the install; per-project queries accumulate from there.
+  - **AIDA core** — possibly. Some agile primitives (cycle time, velocity, dependency walks) might belong in `aida` itself so non-chat surfaces benefit too. See Open Question #1.
+
+  ## Decomposition (not yet broken out — awaiting EPIC-26 sequencing decisions)
+
+  - **A: Artifact format + storage layout.** `.aida/queries/<name>.{ext}` or similar. Each artifact has a name, description, output kind (text | table | graph), invocation (shell / jq / mermaid template / etc.).
+  - **B: Seed library.** Ship ~7-8 starter queries with aida-chat:
+    - `in-progress` — list stories currently in-progress
+    - `blocked` — stories tagged blocked or with unresolved-dep relationships
+    - `recent-activity` — what's been touched in the last N days
+    - `sprint-burndown` — completed-vs-remaining over time (if substrate carries sprint metadata)
+    - `velocity` — completed per week, last K weeks
+    - `dep-graph EPIC-N` — mermaid dependency graph rooted at a SPEC-ID
+    - `bugs-by-component` — bug count grouped by tag or path heuristic
+    - `cycle-time` — average days between Approved → Completed for shipped stories
+  - **C: Query discovery + execution tools.** Two new tools for the agent: `list_queries` (returns the library) and `run_query(name, args?)` (executes the allowlisted artifact). Skill-registry-aware so the model can pick the right query from a natural-language ask.
+  - **D: AI-generated → save-back workflow.** When the LLM writes a novel artifact in response to a question, offer "save as canned query?" affordance. Operator names + approves; artifact lands in `.aida/queries/`. Hits feedback-loop pattern from STORY-21..25.
+  - **E: Graph artifact rendering surface.** Chat UI renders mermaid/dot inline. Server-side fallback for environments without browser-side rendering. Probably mermaid first (markdown-native, lighter dep).
+  - **F: Plug-in starter-pack bundling + per-project overrides.** `aida-chat init` (or equivalent) drops the seed library into `.aida/queries/`. Project-specific additions accumulate alongside. Composes with STORY-20.
+
+  Slice order when this EPIC activates (suggested): A (format) → B+C in parallel (seed library + execution tools — independent surfaces) → E (graph rendering, lighter UI work) → D (save-back loop, depends on B+C) → F (packaging, depends on stable library shape).
+
+  ## Open questions for operator + master
+
+  1. **AIDA core vs aida-chat split.** Where does the library live? My read: core agile primitives (`list_requirements` with proper filters, `cycle_time`, `dep_walk`) belong in AIDA core so non-chat surfaces benefit; rendering + UI affordances live in aida-chat. But the agile vocabulary is currently aida-chat-flavored — worth master's read on whether to graduate primitives to core.
+  2. **Artifact execution surface.** Likely candidates: shell scripts (allowlisted via path confinement), jq filters over `aida list --json`, mermaid template files, lua/starlark sandbox. Each has security + portability tradeoffs. A small ADR before implementer work is warranted.
+  3. **Library curation model.** Per-project file, AIDA-shipped baseline + per-project overrides, or community-contributable? Affects discoverability and how EPIC-26's FAQ-review-loop interacts with library growth.
+
+  ## Out of scope (for this EPIC)
+
+  - Live dashboards (separate scope; standalone UI surface, not chat-embedded)
+  - Historical analytics requiring event-sourcing of substrate changes (would need substrate-change journaling; bigger story)
+  - Cross-project rollups (multi-project is itself out of scope for current aida-chat MVP)
+  - Workflow automation (canned-queries are read-only by default; writes stay in the capture loops STORY-21..25)
+
+  ## Day-2+ pickup
+
+  Filing as Draft per [[feedback-dont-pivot-day1-for-new-scope]]. Day-1 close is the killer demo recording, not this. After day-1 closes, decide priority + sequencing relative to EPIC-26's foundation slice (which gates the skill-registry mechanics this EPIC builds on).
+status: Draft
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T21:53:04.514260115Z
+modified_at: 2026-05-24T21:53:04.514260115Z
+req_type: Epic
+tags:
+- agile
+- artifact-reuse
+- canned-queries
+- domain-application
+- plug-in
+- query-library
+- substrate-grounded
