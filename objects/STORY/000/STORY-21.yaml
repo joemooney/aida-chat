@@ -8,14 +8,8 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:38:56.651524973Z
-modified_at: 2026-05-24T18:06:08.826460084Z
+modified_at: 2026-05-24T18:06:24.741088324Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
 - epic:EPIC-16
-comments:
-- id: 019e5b2a-71ba-7101-9289-02d07fdfd9b6
-  author: temporary MCP available-tool check delete me
-  content: mcp
-  created_at: 2026-05-24T18:06:08.826451554Z
-  modified_at: 2026-05-24T18:06:08.826451554Z
