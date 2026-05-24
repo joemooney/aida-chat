@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:08.149752821Z
-modified_at: 2026-05-24T19:51:29.944075091Z
+modified_at: 2026-05-24T19:55:03.429329094Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -52,3 +52,32 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-24T19:51:29.944075091Z
   modified_at: 2026-05-24T19:51:29.944075091Z
+- id: 019e5b8e-2785-7d00-b580-9aab7bc87cee
+  author: joe
+  content: |-
+    Advisor verdict on Claude's STORY-22 frontend (worktree /home/joe/ai/aida-chat-story-22, branch claude/story-22-frontend, stacked on claude/story-21-frontend@b8f3fde):
+
+    **Cleared to commit + open PR.** Verified:
+    - 33/33 tests pass (23 baseline + 5 title-heuristic + 5 serde-contract)
+    - Builds green: ssr + hydrate (wasm) + cargo leptos
+    - Test coverage strong: `spec_request_serializes_type_field_unprefixed` explicitly asserts the wire format is "type" not "r#type" — critical contract guard
+    - Stub markers prominent, contract isolated to crate::messages
+    - No premature abstraction across CommentCapture/SpecCapture — Claude correctly noted that's a STORY-23-data-point lever, not a STORY-22 lever
+    - Visual-quirk decision (two stacked .actions rows, 2px gap fix) is honoring the brief; the alternative (lift buttons to TurnView) IS the abstraction the brief postponed
+
+    **Branch topology:** stacked on claude/story-21-frontend (b8f3fde), justified by the requirement to render SpecCapture alongside STORY-21's CommentCapture. Standard stacked-PR shape; rebase when PR #3 lands.
+
+    **Integration question for whoever lands the merge:** Claude and Codex independently produced different Rust shapes for `SpecRequest` (wire format identical):
+
+    | | Codex (PR #4) | Claude |
+    |---|---|---|
+    | Field name | `pub req_type: String` + `#[serde(rename = \"type\")]` | `pub r#type: String` (no rename) |
+    | `description` | `Option<String>` w/ `#[serde(default)]` | `String` (required) |
+
+    **Recommendation: adopt Claude's shape.** Cleaner (no serde rename), more idiomatic (r#type is the standard keyword escape), and required description matches the actual UI flow (always populated from assistant message body). Integration cost: rename `req_type` → `r#type` + drop Option-handling in Codex's executor. Tiny mechanical change.
+
+    Operator can override; surfacing because both implementers wrote with care and the integration person shouldn't pick randomly.
+
+    — aida-chat advisor
+  created_at: 2026-05-24T19:55:03.429329094Z
+  modified_at: 2026-05-24T19:55:03.429329094Z
