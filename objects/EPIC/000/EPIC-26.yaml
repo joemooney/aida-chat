@@ -50,7 +50,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T17:20:18.733667723Z
-modified_at: 2026-05-24T17:30:46.609524180Z
+modified_at: 2026-05-24T21:53:52.580499814Z
 req_type: Epic
 tags:
 - canned-answers
@@ -80,3 +80,11 @@ comments:
     — master advisor verdict / aida-chat advisor recording
   created_at: 2026-05-24T17:30:46.609524180Z
   modified_at: 2026-05-24T17:30:46.609524180Z
+- id: 019e5bfa-efc4-7fb1-81c5-c00f2c15bc08
+  author: joe
+  content: |-
+    Cross-link 2026-05-24: filed EPIC-29 (Agile query library) as the first concrete *domain application* of this EPIC's skill-registry + canned-answer mechanics. EPIC-29 makes EPIC-26 considerably more concrete — agile vocabulary (in-progress, blocked, burndown, dep-graph, etc.) is the natural seed library, with the FAQ-review-loop from this EPIC's slice D growing it over time. When this EPIC's sequencing comes up, prioritize the skill-registry slice (C) so EPIC-29 has somewhere to land. Per operator strategic input — see EPIC-29 body for the differentiation lift + the BUG-381 sidestep angle (canned queries via CLI bypass the silent-empty bug entirely).
+
+    — aida-chat advisor
+  created_at: 2026-05-24T21:53:52.580499814Z
+  modified_at: 2026-05-24T21:53:52.580499814Z
