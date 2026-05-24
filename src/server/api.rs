@@ -14,14 +14,15 @@ use axum::response::{IntoResponse, Json};
 use axum::routing::{get, post};
 use axum::Router;
 use leptos::prelude::LeptosOptions;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
 use crate::messages::{
-    ChatHistory, ChatTurn, CreateSessionResponse, Role, ServerInfo, SpecRequest, SpecResponse,
+    ChatHistory, ChatTurn, CommentRequest, CommentResponse, CreateSessionResponse, Role,
+    ServerInfo, SpecRequest, SpecResponse,
 };
 use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
@@ -88,21 +89,6 @@ async fn get_history(
 struct ChatQuery {
     session_id: String,
     q: String,
-}
-
-#[derive(Deserialize)]
-struct CommentRequest {
-    spec_id: String,
-    text: String,
-}
-
-#[derive(Serialize)]
-struct CommentResponse {
-    ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
 }
 
 // trace:STORY-21 | ai:codex
