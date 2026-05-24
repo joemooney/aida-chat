@@ -1,0 +1,18 @@
+id: 019e58ce-894b-71a2-b0db-88a049190e64
+spec_id: EPIC-16
+agreed_id: EPIC-16
+title: Evolve aida-chat into first-proof-of-concept aida-consumer
+description: "AIDA's 'agent-collaboration layer' positioning has been theoretical — only proven via\n   self-dogfood. aida-chat ships as the first NON-dogfood consumer, proving (a) AIDA's substrate is usable from outside, (b) the plug-in/add-on pattern works, and (c) \n  substrate-grounded LLM chat creates a virtuous feedback loop.\n\n  Existing architecture (Leptos+Axum web app, custom Rust agent loop, MCP integration tools, own .aida-store) is a 10-day-old MVP that predates today's substrate \n  growth (EPIC-31 launchers, calibration, lifecycle short-circuit). The evolution is 'leverage today's substrate' not 'build from scratch.'\n\n  ## Differentiation thesis\n\n  Generic LLM chat sees code + commits. aida-chat sees code + commits + SPEC GRAPH + TRACE COMMENTS + PLAN ARCHIVE + PUNT LEDGER + CALIBRATION DATA + MEMORIES. Every \n  claim it makes is attributed to a SPEC-ID + file:line. That's the differentiation.\n\n  ## Five feedback loops (substrate-growth mechanisms)\n\n  1. chat → spec comment (discussion summarized as aida comment add)\n  2. chat → new task/bug (friction surfaces, pre-filled aida add offered)\n  3. chat → memory (patterns + principles get written as ~/.claude/projects/<slug>/memory/)\n  4. chat → plan seed (design clarification on Approved spec offered via aida ultraplan)\n  5. chat → trace gap detection (scan // trace comments, ask LLM 'does this code still match this spec?')\n\n  ## MCP-first integration contract\n\n  aida-chat consumes AIDA via MCP first (list_requirements, show_requirement, search_requirements, resources). CLI as fallback (aida list --json, aida show, aida \n  history --events). Direct file reads only for plan archive + punt ledger (until MCP exposes them).\n\n  ## Out of scope\n\n  - Multi-project (one aida-chat install talks to one project at a time)\n  - Hosted SaaS (self-host first)\n  - Cross-aida-substrate sync\n\n  ## Composes with\n\n  - AIDA's MCP server (substrate this depends on)\n  - AIDA's spec graph + trace web (the differentiation surface)\n  - Future projects-using-aida (this EPIC is the template they inherit)"
+status: Approved
+priority: High
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-24T07:06:31.115659540Z
+modified_at: 2026-05-24T07:06:31.115659540Z
+req_type: Epic
+tags:
+- first-consumer
+- plug-in
+- substrate-grounded
+- virtuous-loop
+- vision
