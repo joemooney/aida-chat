@@ -211,7 +211,9 @@ async fn chat_stream(
     });
 
     let stream = ReceiverStream::new(rx).map(event_to_sse);
-    Sse::new(stream).keep_alive(KeepAlive::new()).into_response()
+    Sse::new(stream)
+        .keep_alive(KeepAlive::new())
+        .into_response()
 }
 
 fn event_to_sse(ev: AgentEvent) -> Result<Event, Infallible> {

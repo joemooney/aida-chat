@@ -60,27 +60,25 @@ pub struct ServerConfig {
 
 impl ServerConfig {
     pub fn from_env() -> Result<Self, String> {
-        let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").ok().filter(|s| !s.trim().is_empty());
+        let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
         let backend = pick_backend(anthropic_api_key.is_some())?;
 
         // Validate that the chosen backend actually has what it needs.
         if backend == Backend::Anthropic && anthropic_api_key.is_none() {
-            return Err(
-                "Backend is anthropic but ANTHROPIC_API_KEY is not set. \
+            return Err("Backend is anthropic but ANTHROPIC_API_KEY is not set. \
                  Either export ANTHROPIC_API_KEY or set AIDA_CHAT_BACKEND=claude-cli."
-                    .to_string(),
-            );
+                .to_string());
         }
         if backend == Backend::ClaudeCli && which("claude").is_none() {
-            return Err(
-                "Backend is claude-cli but `claude` was not found on PATH. \
+            return Err("Backend is claude-cli but `claude` was not found on PATH. \
                  Install Claude Code or set AIDA_CHAT_BACKEND=anthropic."
-                    .to_string(),
-            );
+                .to_string());
         }
 
-        let model = std::env::var("AIDA_CHAT_MODEL")
-            .unwrap_or_else(|_| "claude-sonnet-4-6".to_string());
+        let model =
+            std::env::var("AIDA_CHAT_MODEL").unwrap_or_else(|_| "claude-sonnet-4-6".to_string());
         let repo_root = match std::env::var("AIDA_CHAT_REPO_ROOT") {
             Ok(s) => PathBuf::from(s),
             Err(_) => std::env::current_dir().map_err(|e| format!("cwd: {e}"))?,

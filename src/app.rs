@@ -10,7 +10,7 @@ use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
-use crate::messages::{ChatTurn, Role, ToolCallSummary};
+use crate::messages::{ChartArtifact, ChatTurn, Role, ToolCallSummary};
 #[cfg(feature = "hydrate")]
 use crate::messages::{ChatHistory, CommentResponse, SpecResponse};
 
@@ -141,8 +141,8 @@ fn render_markdown(src: &str) -> String {
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_FOOTNOTES);
-    let parser = Parser::new_ext(src, opts)
-        .filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_)));
+    let parser =
+        Parser::new_ext(src, opts).filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_)));
     let mut out = String::new();
     html::push_html(&mut out, parser);
     out
@@ -340,6 +340,9 @@ fn ChatPage() -> impl IntoView {
                                     .collect_view()
                             }}
                         </div>
+                        <div class="chart-stack">
+                            {move || chart_artifacts_view(live_tools.get())}
+                        </div>
                         <div class="text markdown" inner_html=move || render_markdown(&live_text.get())/>
                         <span class="cursor">"▌"</span>
                     </div>
@@ -385,13 +388,17 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
     };
     let has_tools = !turn.tool_calls.is_empty();
     let tools_view = if has_tools {
-        let badges = turn
-            .tool_calls
+        let tools = turn.tool_calls.clone();
+        let badges = tools
             .clone()
             .into_iter()
             .map(|tc| view! { <ToolBadge call=tc/> })
             .collect_view();
-        Some(view! { <div class="tools">{badges}</div> })
+        let charts = chart_artifacts_view(tools);
+        Some(view! {
+            <div class="tools">{badges}</div>
+            <div class="chart-stack">{charts}</div>
+        })
     } else {
         None
     };
@@ -616,14 +623,14 @@ fn save_comment(
 fn schedule_clear(set_badge_msg: WriteSignal<Option<String>>) {
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let cb = Closure::<dyn FnMut()>::new(move || {
         set_badge_msg.set(None);
     });
-    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-        cb.as_ref().unchecked_ref(),
-        3000,
-    );
+    let _ = window
+        .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 3000);
     cb.forget();
 }
 
@@ -838,6 +845,28 @@ fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
     }
 }
 
+// trace:EPIC-29 | ai:codex
+fn chart_artifacts_view(calls: Vec<ToolCallSummary>) -> impl IntoView {
+    calls
+        .into_iter()
+        .filter_map(|call| call.chart)
+        .map(|chart| view! { <ChartArtifactView chart=chart/> })
+        .collect_view()
+}
+
+#[component]
+fn ChartArtifactView(chart: ChartArtifact) -> impl IntoView {
+    view! {
+        <figure class="chart-artifact">
+            <figcaption>
+                <span>{chart.title}</span>
+                <small>{chart.summary}</small>
+            </figcaption>
+            <div class="chart-svg" inner_html=chart.svg/>
+        </figure>
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Client-only helpers (only compiled into the wasm bundle)
 // ---------------------------------------------------------------------------
@@ -892,10 +921,7 @@ mod spec_id_tests {
         // Boundary at start of string.
         assert_eq!(extract_first_spec_id("EPIC-1"), Some("EPIC-1".into()));
         // Boundary at end of string.
-        assert_eq!(
-            extract_first_spec_id("(EPIC-1)").as_deref(),
-            Some("EPIC-1")
-        );
+        assert_eq!(extract_first_spec_id("(EPIC-1)").as_deref(), Some("EPIC-1"));
         // Adjacent punctuation OK.
         assert_eq!(
             extract_first_spec_id("Reference: STORY-42, please."),
@@ -911,7 +937,9 @@ mod spec_id_tests {
 
     #[test]
     fn is_valid_spec_id_accepts_known_prefixes() {
-        for s in ["EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2"] {
+        for s in [
+            "EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2",
+        ] {
             assert!(is_valid_spec_id(s), "{s:?} should be valid");
         }
     }
@@ -1085,8 +1113,8 @@ async fn fetch_history(session_id: &str) -> Result<ChatHistory, String> {
     let opts = RequestInit::new();
     opts.set_method("GET");
     let url = format!("/api/sessions/{session_id}/history");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1136,8 +1164,8 @@ async fn post_comment(session_id: &str, spec_id: &str, text: &str) -> Result<Str
     opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
 
     let url = format!("/api/sessions/{session_id}/comment");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1200,8 +1228,8 @@ async fn post_spec(
     opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
 
     let url = format!("/api/sessions/{session_id}/spec");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1325,7 +1353,10 @@ fn stream_chat(
             if let Some(es) = es_holder.borrow_mut().take() {
                 es.close();
             }
-            let msg = ev.data().as_string().unwrap_or_else(|| "stream error".into());
+            let msg = ev
+                .data()
+                .as_string()
+                .unwrap_or_else(|| "stream error".into());
             on_error(msg);
         });
         es.add_event_listener_with_callback("err", cb.as_ref().unchecked_ref())

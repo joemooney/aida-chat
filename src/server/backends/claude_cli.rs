@@ -97,14 +97,19 @@ pub async fn run_turn(
         Err(_) => {
             registry().forget(&session_id).await;
             let _ = tx
-                .send(AgentEvent::Error("claude live process died mid-turn".into()))
+                .send(AgentEvent::Error(
+                    "claude live process died mid-turn".into(),
+                ))
                 .await;
             return;
         }
     };
 
     match outcome {
-        TurnOutcome::Ok { final_text, tool_calls } => {
+        TurnOutcome::Ok {
+            final_text,
+            tool_calls,
+        } => {
             let transcript_turn = ChatTurn {
                 role: Role::Assistant,
                 text: final_text,
@@ -194,9 +199,7 @@ impl LiveProcessRegistry {
     async fn evict_idle(&self, ttl: std::time::Duration) {
         let now = Instant::now();
         let mut map = self.inner.lock().await;
-        map.retain(|_, h| {
-            !h.request_tx.is_closed() && now.duration_since(h.last_used) < ttl
-        });
+        map.retain(|_, h| !h.request_tx.is_closed() && now.duration_since(h.last_used) < ttl);
         // The dropped handles close their channels, which terminates
         // the matching actor tasks, which kill the child processes.
     }
@@ -258,9 +261,9 @@ fn spawn_actor(
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| {
-        format!("spawn `claude`: {e}. Is Claude Code installed and on PATH?")
-    })?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn `claude`: {e}. Is Claude Code installed and on PATH?"))?;
     let stdin = child.stdin.take().expect("stdin piped");
     let stdout = child.stdout.take().expect("stdout piped");
     let stderr = child.stderr.take().expect("stderr piped");
@@ -289,7 +292,9 @@ fn spawn_actor(
         });
     }
 
-    tokio::spawn(actor(child, stdin, stdout, stderr_buf, requests, session_id));
+    tokio::spawn(actor(
+        child, stdin, stdout, stderr_buf, requests, session_id,
+    ));
     Ok(())
 }
 
@@ -423,9 +428,7 @@ async fn wait_for_ready<R: AsyncBufReadExt + Unpin>(
                 }
                 // Anything else: keep scanning.
             }
-            Ok(None) => {
-                return Some("claude stdout closed before init".to_string())
-            }
+            Ok(None) => return Some("claude stdout closed before init".to_string()),
             Err(e) => return Some(format!("read stdout: {e}")),
         }
     }
@@ -442,11 +445,7 @@ struct StreamState {
     final_outcome: Option<Result<String, String>>,
 }
 
-async fn handle_line(
-    line: &str,
-    state: &mut StreamState,
-    tx: &mpsc::Sender<AgentEvent>,
-) {
+async fn handle_line(line: &str, state: &mut StreamState, tx: &mpsc::Sender<AgentEvent>) {
     let line = line.trim();
     if line.is_empty() {
         return;
@@ -498,6 +497,7 @@ async fn handle_line(
                         name,
                         input_preview: preview,
                         ok: true,
+                        chart: None,
                     };
                     let idx = state.tool_calls.len();
                     state.tool_calls.push(summary.clone());

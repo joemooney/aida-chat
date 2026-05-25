@@ -53,6 +53,8 @@ dotenvy = { version = "0.15", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
 async-trait = { version = "0.1", optional = true }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+serde_yaml = { version = "0.9", optional = true }
 
 [features]
 default = []
@@ -81,6 +83,8 @@ ssr = [
     "dep:async-trait",
     "dep:uuid",
     "dep:chrono",
+    "dep:rusqlite",
+    "dep:serde_yaml",
 ]
 
 [profile.release]

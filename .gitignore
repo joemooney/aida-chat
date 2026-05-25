@@ -26,3 +26,8 @@
 # Leptos generated site bundle
 /site/
 
+# Antigravity agent files
+.antigravitycli/
+.antigravitycli
+
+
