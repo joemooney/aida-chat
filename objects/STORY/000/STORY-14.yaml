@@ -7,12 +7,12 @@ description: |-
   - Tool badges in the UI are clickable.
   - Clicking expands a panel showing the tool's full input JSON, full output text, and timing.
   - v0 only emits a short input preview; this story extends the SSE `tool` event payload and the SessionStore to preserve the full content.
-status: Draft
+status: InProgress
 priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:50:02.458906292Z
-modified_at: 2026-05-25T02:23:27.738515935Z
+modified_at: 2026-05-25T02:23:34.006601337Z
 req_type: Story
 relationships:
 - rel_type: Child
