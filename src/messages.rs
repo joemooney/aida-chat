@@ -92,6 +92,28 @@ pub struct SpecResponse {
     pub error: Option<String>,
 }
 
+/// `POST /api/sessions/:id/memory` request body (STORY-23). `type`
+/// lands on the wire as `type`; `r#` is only Rust-keyword escaping.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryRequest {
+    pub name: String,
+    pub description: String,
+    pub r#type: String,
+    pub body: String,
+}
+
+/// `POST /api/sessions/:id/memory` response body (STORY-23).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub error: Option<String>,
+}
+
 #[cfg(test)]
 mod spec_contract_tests {
     // trace:STORY-22 | ai:claude
@@ -156,5 +178,32 @@ mod spec_contract_tests {
         let back: SpecResponse = serde_json::from_str(json).unwrap();
         assert!(back.ok);
         assert_eq!(back.spec_id.as_deref(), Some("TASK-1"));
+    }
+
+    #[test]
+    fn memory_request_serializes_type_field_unprefixed() {
+        let req = MemoryRequest {
+            name: "remember-this".into(),
+            description: "A useful correction".into(),
+            r#type: "feedback".into(),
+            body: "Use the local substrate.".into(),
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains(r#""type":"feedback""#), "json was {json}");
+        let back: MemoryRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.r#type, "feedback");
+    }
+
+    #[test]
+    fn memory_response_success_skips_error_field() {
+        let r = MemoryResponse {
+            ok: true,
+            path: Some("/tmp/memory/foo.md".into()),
+            message: Some("Memory saved".into()),
+            error: None,
+        };
+        let s = serde_json::to_string(&r).unwrap();
+        assert!(s.contains(r#""path":"/tmp/memory/foo.md""#));
+        assert!(!s.contains(r#""error""#), "error should be skipped: {s}");
     }
 }
