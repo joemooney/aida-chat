@@ -20,16 +20,18 @@ pub enum Role {
 pub struct ChatTurn {
     pub role: Role,
     pub text: String,
-    /// Names of tools the agent invoked while producing this assistant turn.
-    /// Empty for user turns.
+    /// Full tool audit trail for this assistant turn. Empty for user turns.
     #[serde(default)]
-    pub tool_calls: Vec<ToolCallSummary>,
+    pub tool_calls: Vec<ToolCall>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallSummary {
+// trace:STORY-14 | ai:codex
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolCall {
     pub name: String,
-    pub input_preview: String,
+    pub input: serde_json::Value,
+    pub output: String,
+    pub duration_ms: u64,
     pub ok: bool,
 }
 
@@ -205,5 +207,52 @@ mod spec_contract_tests {
         let s = serde_json::to_string(&r).unwrap();
         assert!(s.contains(r#""path":"/tmp/memory/foo.md""#));
         assert!(!s.contains(r#""error""#), "error should be skipped: {s}");
+    }
+
+    #[test]
+    fn tool_call_roundtrip_preserves_full_shape() {
+        let call = ToolCall {
+            name: "find_traces".into(),
+            input: serde_json::json!({"spec_id": "EPIC-16"}),
+            output: "trace hits".into(),
+            duration_ms: 42,
+            ok: true,
+        };
+
+        let json = serde_json::to_string(&call).unwrap();
+        assert!(!json.contains("input_preview"));
+        let back: ToolCall = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, call);
+    }
+
+    #[test]
+    fn chat_turn_roundtrip_preserves_multiple_tool_calls() {
+        let turn = ChatTurn {
+            role: Role::Assistant,
+            text: "done".into(),
+            tool_calls: vec![
+                ToolCall {
+                    name: "aida_show".into(),
+                    input: serde_json::json!({"spec_id": "STORY-14"}),
+                    output: "story body".into(),
+                    duration_ms: 7,
+                    ok: true,
+                },
+                ToolCall {
+                    name: "grep_repo".into(),
+                    input: serde_json::json!({"pattern": "ToolCall"}),
+                    output: "error: bad input".into(),
+                    duration_ms: 3,
+                    ok: false,
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&turn).unwrap();
+        let back: ChatTurn = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.tool_calls.len(), 2);
+        assert_eq!(back.tool_calls[0].input["spec_id"], "STORY-14");
+        assert_eq!(back.tool_calls[1].output, "error: bad input");
+        assert!(!json.contains("input_preview"));
     }
 }

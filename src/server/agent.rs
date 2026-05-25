@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::messages::ToolCallSummary;
+use crate::messages::ToolCall;
 use crate::server::backends;
 use crate::server::config::{Backend, ServerConfig};
 use crate::server::sessions::SessionStore;
@@ -19,7 +19,7 @@ pub enum AgentEvent {
     /// One incremental chunk of assistant text.
     TextDelta(String),
     /// A tool just finished (success or error).
-    ToolCall(ToolCallSummary),
+    ToolCall(ToolCall),
     /// Turn finished cleanly.
     Done,
     /// Fatal error during the turn; the channel will close right after.

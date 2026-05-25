@@ -10,9 +10,9 @@ use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
-use crate::messages::{ChatTurn, Role, ToolCallSummary};
 #[cfg(feature = "hydrate")]
 use crate::messages::{ChatHistory, CommentResponse, SpecResponse};
+use crate::messages::{ChatTurn, Role, ToolCall};
 
 // trace:STORY-21 | ai:claude
 //
@@ -188,7 +188,7 @@ fn ChatPage() -> impl IntoView {
     let (draft, set_draft) = signal(String::new());
     let (streaming, set_streaming) = signal(false);
     let (live_text, set_live_text) = signal(String::new());
-    let (live_tools, set_live_tools) = signal::<Vec<ToolCallSummary>>(vec![]);
+    let (live_tools, set_live_tools) = signal::<Vec<ToolCall>>(vec![]);
     let (error, set_error) = signal::<Option<String>>(None);
     let (session_id, set_session_id) = signal::<Option<String>>(None);
     #[allow(unused_variables)] // set_backend is only used in the hydrate build
@@ -828,9 +828,9 @@ fn save_spec(
 }
 
 #[component]
-fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
+fn ToolBadge(call: ToolCall) -> impl IntoView {
     let status = if call.ok { "ok" } else { "err" };
-    let title = call.input_preview.clone();
+    let title = call.input.to_string();
     view! {
         <span class=format!("tool-badge {status}") title=title>
             <span class="tool-name">{call.name.clone()}</span>
@@ -1235,8 +1235,8 @@ fn stream_chat(
     session_id: String,
     user_text: String,
     set_live_text: WriteSignal<String>,
-    set_live_tools: WriteSignal<Vec<ToolCallSummary>>,
-    on_done: impl Fn(String, Vec<ToolCallSummary>) + 'static,
+    set_live_tools: WriteSignal<Vec<ToolCall>>,
+    on_done: impl Fn(String, Vec<ToolCall>) + 'static,
     on_error: impl Fn(String) + 'static,
 ) {
     use std::cell::RefCell;
@@ -1262,7 +1262,7 @@ fn stream_chat(
     };
     let es_holder: Rc<RefCell<Option<EventSource>>> = Rc::new(RefCell::new(Some(es.clone())));
     let accumulated: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
-    let tools: Rc<RefCell<Vec<ToolCallSummary>>> = Rc::new(RefCell::new(vec![]));
+    let tools: Rc<RefCell<Vec<ToolCall>>> = Rc::new(RefCell::new(vec![]));
     let on_done = Rc::new(on_done);
     let on_error = Rc::new(on_error);
 
@@ -1286,7 +1286,7 @@ fn stream_chat(
         let tools = tools.clone();
         let cb = Closure::<dyn FnMut(MessageEvent)>::new(move |ev: MessageEvent| {
             if let Some(s) = ev.data().as_string() {
-                if let Ok(tc) = serde_json::from_str::<ToolCallSummary>(&s) {
+                if let Ok(tc) = serde_json::from_str::<ToolCall>(&s) {
                     let mut t = tools.borrow_mut();
                     t.push(tc);
                     set_live_tools.set(t.clone());
