@@ -63,7 +63,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T21:53:04.514260115Z
-modified_at: 2026-05-25T06:41:00.971477091Z
+modified_at: 2026-05-25T06:42:00.661338570Z
 req_type: Epic
 tags:
 - agile
@@ -84,3 +84,8 @@ comments:
   content: 'Codex EPIC-29 implementation ready on codex/epic-29-charts-overnight: chart_status/chart_sprint/chart_feature tools, inline SVG chart artifacts, cache/YAML data loader, architecture doc, screenshots, and charts_smoke verified against aida-chat and aida core substrates.'
   created_at: 2026-05-25T06:41:00.971477091Z
   modified_at: 2026-05-25T06:41:00.971477091Z
+- id: 019e5dde-7555-73a2-81ce-b3880000bef6
+  author: joe
+  content: 'Codex EPIC-29 draft PR opened: https://github.com/joemooney/aida-chat/pull/12. Includes architecture doc, SVG captures, charts_smoke, and verification against aida-chat plus AIDA core substrates.'
+  created_at: 2026-05-25T06:42:00.661338570Z
+  modified_at: 2026-05-25T06:42:00.661338570Z
