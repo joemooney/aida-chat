@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-25T02:18:04.335216582Z
+modified_at: 2026-05-25T16:15:00.049902824Z
 req_type: Epic
 tags:
 - first-consumer
@@ -218,3 +218,40 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-25T02:18:04.335216582Z
   modified_at: 2026-05-25T02:18:04.335216582Z
+- id: 019e5feb-0bd1-7b60-b207-670e18bc9b9a
+  author: joe
+  content: |-
+    **Day-1 close — killer demo recorded 2026-05-25.**
+
+    Operator recorded the four-prompt killer demo per docs/aida/2026-05-24-killer-demo-script.md. Screenshots filed at docs/aida/2026-05-25-killer-demo-recording/:
+
+    - `prompt-1-where-is-epic-16.png`
+    - `prompt-2-tools-vs-stuffed-prompt-rate-limit.png`
+    - `prompt-3-list-all-requirements.png`
+    - `prompt-4-mcp-failure-mode.png`
+
+    **Per-prompt substrate-grounded evidence:**
+
+    **Prompt 1** — "Where is EPIC-16 implemented?"
+    Tool badges visible: `find_traces` + `aida_show`. Response is a structured table of 5 file:line citations: `src/server/mcp/client.rs:1`, `mod.rs:1`, `protocol.rs:1`, `tools/aida.rs:1`, `tools/traces.rs:1`. Also references docs/aida/2026-05-24-killer-demo-script.md:34 and commits c7c0393 (PR #1) + c9d494d (PR #8 bypass-removal). Demonstrates: SPEC-ID-to-file:line resolution that generic LLM chat cannot produce without substrate access.
+
+    **Prompt 2** — "What's the architectural decision behind exposing tools to the agent instead of pre-stuffing the system prompt?"
+    Hit Anthropic Tier 1 rate-limit (429, 30k tokens/min). Calibration finding from the killer-demo-script played out exactly as predicted: same-session history accumulation blew the per-minute budget. The error itself is informative for viewers (real production system, real limits) but illustrates the "fresh session per prompt for Tier 1" recording discipline the script documents. **Lesson:** Recording captured the rate-limit error verbatim — useful as an honest artifact, not a failure.
+
+    **Prompt 3** — "List all the requirements in this project."
+    Tool badges visible: `grep_repo` + `aida_list` + `aida_show` + `read_file`. Response opens with the ADR-7 decision (Architectural Decision: Tool-call Surface vs. Pre-stuffed System Prompt), explains the contrast with aida-server's stuffed-prompt approach, lists the four rationale rows (scales / always fresh / cheaper / auditable) and the trade-offs accepted (more round-trips, requires custom agent loop, small projects may be slower). Then transitions into "All Requirements (33 total)" with the Epics table. **Note:** this was the reframed Prompt 3 (substituted for "what's still in progress?" to sidestep BUG-381). The reframe produced a *richer* answer than the original would have — the model went broader and pulled the architectural decision context too.
+
+    **Prompt 4** — "What happens if AIDA's MCP server dies mid-session?"
+    Five-step failure-mode walkthrough with exact file:line ranges: client.rs:190-197 (broken-pipe write), client.rs:310-315 (reader-task EOF), aida.rs:264-273 (try_mcp Closed→Unavailable mapping), client.rs:88-115 (respawn on next call + 2-second backoff), aida.rs:206 (aida_resource no-CLI-fallback exception). Includes an ASCII-art summary flow diagram. **Crucially: cites the advisor's own iteration history on the EPIC-16 OnceCell→Mutex<ClientSlot> design** ("the advisor initially flagged that the original OnceCell design would permanently disable MCP..."). The substrate carries enough context that aida-chat can narrate its own design evolution back to the user.
+
+    **UI surface note** — the "Verify trace drift for EPIC-16" button visible in the recording is forward-looking; not present on origin/master at recording time. Either operator recorded against a local working tree with additional UI work, or a placeholder render was active. If recording is shared externally, viewers cloning master will see only "Save as comment" + "Create as new SPEC" affordances. Real verify_trace_drift backend is in-flight with Codex (STORY-25 overnight dispatch); UI affordance hasn't shipped yet.
+
+    **Tier 1 rate-limit calibration confirmed:** killer-demo-script.md "Use a fresh session per prompt" guidance is empirically validated. For future recordings under Tier 1 ($20 budget): always refresh between prompts. Tier 2 ($100+ budget) would loosen this constraint.
+
+    **Differentiation thesis — empirically validated.** Four prompts, three producing textbook substrate-grounded answers with SPEC-ID + file:line citations + commit references + test references + cross-references to the advisor's own iteration history. Generic LLM chat sees code + commits; aida-chat sees code + commits + SPEC GRAPH + TRACE COMMENTS + PLAN ARCHIVE + advisor-iteration-history + cross-PR-context. That is the wedge.
+
+    **Status decision:** EPIC-16 stays Approved (active children — STORY-25 in flight with Codex; EPIC-29 V2 in flight with Claude; OVERVIEW.md update in queue with AGY). The day-1 milestone is captured by this artifact, not by status transition. EPIC-16 transitions to Completed when STORY-21..25 are all done and the foundational architecture is stable enough that follow-on work (multi-user EPIC-8, etc.) operates against a closed parent.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T16:15:00.049902824Z
+  modified_at: 2026-05-25T16:15:00.049902824Z
