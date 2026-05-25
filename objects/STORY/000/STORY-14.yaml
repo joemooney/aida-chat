@@ -12,7 +12,7 @@ priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:50:02.458906292Z
-modified_at: 2026-05-25T02:35:50.095474320Z
+modified_at: 2026-05-25T02:54:45.089636288Z
 req_type: Story
 relationships:
 - rel_type: Child
@@ -64,3 +64,37 @@ comments:
   content: Commit 224ff2a references this requirement
   created_at: 2026-05-25T02:35:50.095474320Z
   modified_at: 2026-05-25T02:35:50.095474320Z
+- id: 019e5d0e-6561-77b3-a5fe-7b8eccfc42d4
+  author: joe
+  content: |-
+    Advisor verdict on PR #10 (STORY-14 frontend, commit 9ef1862):
+
+    **Cleared to merge — with a slightly meatier integration cleanup than usual.** Verified independently on detached worktree:
+
+    - 43/43 tests pass on a clean clone (36 baseline + 7 new in `tool_inspector_tests`).
+    - Build green per Claude's report: ssr + hydrate + cargo leptos.
+    - Architectural call is good: single `<ToolStrip>` component drives both live (SSE) + historical (TurnView) rendering; component-local expanded-set state per turn; no shared global state.
+    - `<ToolCallPanel>` is a new component (read-only details panel), distinct from the three capture-form components — correct factoring decision.
+    - Dev fixture `dev_fixture_tool_calls()` is a nice touch for visual regression sanity.
+
+    **Shim integration:** Claude couldn't see Codex's PR #9 was already pushed when starting, so they:
+    - Defined `ToolCall` in `crate::messages` (same shape as Codex's PR #9 — likely byte-identical).
+    - Kept the existing `ToolCallSummary` intact (PR #9 deletes it).
+    - Added `summary_to_tool_call` shim in app.rs that converts the old shape to the new one at render time, with degraded fields (output = "", duration_ms = 0).
+
+    Defensible — clearly-marked shim, removable. But the integration cleanup at merge is more involved than STORY-21/22/23 had. Specifically:
+
+    **Integration plan when both PRs land:**
+    1. Merge PR #9 first (backend defines `ToolCall`, deletes `ToolCallSummary`, both backends emit `ToolCall` directly with full fields).
+    2. Rebase PR #10 onto master. Expected conflicts:
+       - `messages.rs` `ToolCall` definition — duplicate. Keep one (they should be byte-identical; verify before dropping).
+       - `messages.rs` `ToolCallSummary` — PR #9 deletes, PR #10 keeps. Drop it (PR #9's intent).
+       - `app.rs` — Claude's `ToolStrip` signature changes from `Vec<ToolCallSummary>` to `Vec<ToolCall>`; `summary_to_tool_call` shim deletes; usage sites use `ToolCall` directly. Claude's comment block at the shim's location flags exactly what to drop.
+
+    This is mechanical but real surgery. The shim's existence makes the cleanup discoverable; the comment blocks Claude added are the integration script.
+
+    Once both halves land + cleanup applies: STORY-14 → Completed. The clickable tool-call inspector becomes visible in the killer-demo recording.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T02:54:45.089636288Z
+  modified_at: 2026-05-25T02:54:45.089636288Z
