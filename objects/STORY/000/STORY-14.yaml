@@ -12,7 +12,7 @@ priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:50:02.458906292Z
-modified_at: 2026-05-25T02:23:34.006601337Z
+modified_at: 2026-05-25T02:29:46.198853116Z
 req_type: Story
 relationships:
 - rel_type: Child
@@ -24,3 +24,8 @@ comments:
   content: 'Codex starting backend implementation for tool-call inspector: full tool request/response/timing in SSE and persisted ChatTurn.'
   created_at: 2026-05-25T02:23:27.738515935Z
   modified_at: 2026-05-25T02:23:27.738515935Z
+- id: 019e5cf7-8656-7450-b85c-568c3926843c
+  author: joe
+  content: 'Backend implementation complete: ToolCall now carries full input/output/duration/ok, SSE tool events serialize that shape, assistant transcript turns persist tool_calls, and cargo test plus live SSE/history smoke passed.'
+  created_at: 2026-05-25T02:29:46.198853116Z
+  modified_at: 2026-05-25T02:29:46.198853116Z
