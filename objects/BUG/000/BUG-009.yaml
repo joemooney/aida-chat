@@ -1,0 +1,11 @@
+id: 019e5cd9-cd56-7423-ad86-8ae039efe6a3
+spec_id: BUG-009
+title: http smoke mcp-first spec 3004065
+description: temporary MCP-first endpoint smoke; delete me
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-25T01:57:18.294491083Z
+modified_at: 2026-05-25T01:57:18.294491083Z
+req_type: Bug
