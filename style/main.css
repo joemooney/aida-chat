@@ -228,6 +228,39 @@ html, body {
 .tool-badge.ok  { background: var(--tool-ok); }
 .tool-badge.err { background: var(--tool-err); color: var(--error); }
 
+/* trace:EPIC-29 | ai:codex */
+.chart-stack {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0;
+}
+.chart-artifact {
+  margin: 0;
+}
+.chart-artifact figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.chart-artifact figcaption small {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 400;
+  text-align: right;
+}
+.chart-svg {
+  overflow: hidden;
+  border-radius: 8px;
+}
+.chart-svg svg {
+  max-width: 100%;
+}
+
 .error {
   border: 1px solid var(--error);
   color: var(--error);

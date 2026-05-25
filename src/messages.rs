@@ -31,6 +31,17 @@ pub struct ToolCallSummary {
     pub name: String,
     pub input_preview: String,
     pub ok: bool,
+    /// Inline visual artifacts produced by chart tools.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub chart: Option<ChartArtifact>,
+}
+
+// trace:EPIC-29 | ai:codex
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChartArtifact {
+    pub title: String,
+    pub summary: String,
+    pub svg: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

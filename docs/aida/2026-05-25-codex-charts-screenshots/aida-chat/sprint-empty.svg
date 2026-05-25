@@ -1,0 +1,6 @@
+<svg class="aida-chart-svg" role="img" aria-label="Sprint charts" viewBox="0 0 920 260" xmlns="http://www.w3.org/2000/svg">
+<style>
+.aida-chart-svg{width:100%;height:auto;display:block;background:linear-gradient(180deg,var(--bg-elev),var(--assistant));border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+.title{fill:var(--text);font-size:18px;font-weight:700}.subtitle,.muted{fill:var(--text-dim);font-size:11px}.section{fill:var(--text);font-size:13px;font-weight:700}.label{fill:var(--text);font-size:12px;font-weight:600}.value{fill:var(--text);font-size:11px;font-weight:700}.hero{fill:var(--text);font-size:34px;font-weight:800}.grid{stroke:var(--border);stroke-width:1;opacity:.68}.track{fill:var(--border);opacity:.52}.empty{fill:var(--bg);stroke:var(--border);stroke-width:1}
+</style>
+<text x="28" y="34" class="title">Sprint charts</text><text x="28" y="56" class="subtitle">No data</text><rect x="28" y="82" width="864" height="132" rx="8" class="empty"/><text x="460" y="145" text-anchor="middle" class="section">Sprint charts</text><text x="460" y="168" text-anchor="middle" class="muted">No sprint requirements found in this project.</text></svg>

@@ -498,6 +498,7 @@ async fn handle_line(
                         name,
                         input_preview: preview,
                         ok: true,
+                        chart: None,
                     };
                     let idx = state.tool_calls.len();
                     state.tool_calls.push(summary.clone());

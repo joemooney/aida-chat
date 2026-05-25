@@ -10,7 +10,7 @@ use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
-use crate::messages::{ChatTurn, Role, ToolCallSummary};
+use crate::messages::{ChartArtifact, ChatTurn, Role, ToolCallSummary};
 #[cfg(feature = "hydrate")]
 use crate::messages::{ChatHistory, CommentResponse, SpecResponse};
 
@@ -340,6 +340,9 @@ fn ChatPage() -> impl IntoView {
                                     .collect_view()
                             }}
                         </div>
+                        <div class="chart-stack">
+                            {move || chart_artifacts_view(live_tools.get())}
+                        </div>
                         <div class="text markdown" inner_html=move || render_markdown(&live_text.get())/>
                         <span class="cursor">"▌"</span>
                     </div>
@@ -385,13 +388,17 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
     };
     let has_tools = !turn.tool_calls.is_empty();
     let tools_view = if has_tools {
-        let badges = turn
-            .tool_calls
+        let tools = turn.tool_calls.clone();
+        let badges = tools
             .clone()
             .into_iter()
             .map(|tc| view! { <ToolBadge call=tc/> })
             .collect_view();
-        Some(view! { <div class="tools">{badges}</div> })
+        let charts = chart_artifacts_view(tools);
+        Some(view! {
+            <div class="tools">{badges}</div>
+            <div class="chart-stack">{charts}</div>
+        })
     } else {
         None
     };
@@ -835,6 +842,28 @@ fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
         <span class=format!("tool-badge {status}") title=title>
             <span class="tool-name">{call.name.clone()}</span>
         </span>
+    }
+}
+
+// trace:EPIC-29 | ai:codex
+fn chart_artifacts_view(calls: Vec<ToolCallSummary>) -> impl IntoView {
+    calls
+        .into_iter()
+        .filter_map(|call| call.chart)
+        .map(|chart| view! { <ChartArtifactView chart=chart/> })
+        .collect_view()
+}
+
+#[component]
+fn ChartArtifactView(chart: ChartArtifact) -> impl IntoView {
+    view! {
+        <figure class="chart-artifact">
+            <figcaption>
+                <span>{chart.title}</span>
+                <small>{chart.summary}</small>
+            </figcaption>
+            <div class="chart-svg" inner_html=chart.svg/>
+        </figure>
     }
 }
 

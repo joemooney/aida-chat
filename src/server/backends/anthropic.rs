@@ -111,6 +111,7 @@ pub async fn run_turn(
                         name: name.clone(),
                         input_preview: preview,
                         ok,
+                        chart: tools::charts::extract_chart_artifact(&output),
                     };
                     tool_summaries.push(summary.clone());
                     let _ = tx.send(AgentEvent::ToolCall(summary)).await;
@@ -319,6 +320,7 @@ Attribution is the differentiator:
 Guidelines:
   - Prefer calling tools to get current information rather than relying on assumptions.
   - When the user asks 'what epics / stories / bugs are open?' or anything about requirements, prefer the aida_* tools.
+  - When the user asks for agile metrics, status distribution, sprint burndown/burn-up, velocity, or feature progress, use chart_status, chart_sprint, or chart_feature so the answer includes an inline chart artifact.
   - When the user clearly asks to save a substantive discussion summary, design note, or decision to a SPEC, use aida_comment_add sparingly.
   - When the user clearly asks to file work or a defect as a new SPEC, use aida_add sparingly.
   - When the user asks about code or documentation contents, use grep_repo to locate things, then read_file to inspect specific files.
@@ -383,17 +385,16 @@ async fn handle_event(
     };
     match event_name {
         "content_block_start" => {
-            let index = data
-                .get("index")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+            let index = data.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
             let block_type = data
                 .get("content_block")
                 .and_then(|b| b.get("type"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             let block = match block_type {
-                "text" => PartialBlock::Text { text: String::new() },
+                "text" => PartialBlock::Text {
+                    text: String::new(),
+                },
                 "tool_use" => {
                     let id = data
                         .get("content_block")
@@ -413,16 +414,15 @@ async fn handle_event(
                         input_json: String::new(),
                     }
                 }
-                _ => PartialBlock::Text { text: String::new() },
+                _ => PartialBlock::Text {
+                    text: String::new(),
+                },
             };
             ensure_index(&mut state.blocks, index);
             state.blocks[index] = block;
         }
         "content_block_delta" => {
-            let index = data
-                .get("index")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+            let index = data.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
             let delta = data.get("delta").cloned().unwrap_or(Value::Null);
             let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if index >= state.blocks.len() {
@@ -471,7 +471,9 @@ async fn handle_event(
 
 fn ensure_index(blocks: &mut Vec<PartialBlock>, index: usize) {
     while blocks.len() <= index {
-        blocks.push(PartialBlock::Text { text: String::new() });
+        blocks.push(PartialBlock::Text {
+            text: String::new(),
+        });
     }
 }
 
