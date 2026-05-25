@@ -33,9 +33,7 @@ pub async fn run_turn(
     let session = match sessions.get(&session_id).await {
         Some(s) => s,
         None => {
-            let _ = tx
-                .send(AgentEvent::Error("session disappeared".into()))
-                .await;
+            let _ = tx.send(AgentEvent::Error("session disappeared".into())).await;
             return;
         }
     };
@@ -58,7 +56,14 @@ pub async fn run_turn(
     for iteration in 0..cfg.max_tool_iterations {
         let body = build_request_body(&cfg, &working);
         let stream_text_tx = tx.clone();
-        let round = match anthropic_round(&client, api_key, body, stream_text_tx).await {
+        let round = match anthropic_round(
+            &client,
+            api_key,
+            body,
+            stream_text_tx,
+        )
+        .await
+        {
             Ok(r) => r,
             Err(e) => {
                 let _ = tx.send(AgentEvent::Error(e)).await;
@@ -73,9 +78,7 @@ pub async fn run_turn(
         working.push(AgentMessage::Assistant {
             content: blocks.clone(),
         });
-        new_entries.push(AgentMessage::Assistant {
-            content: blocks.clone(),
-        });
+        new_entries.push(AgentMessage::Assistant { content: blocks.clone() });
 
         // Track text for the final visible transcript turn. Each round
         // overwrites; the *last* round's text is what the user sees.
@@ -123,7 +126,9 @@ pub async fn run_turn(
                 new_entries.push(AgentMessage::ToolResults { results });
             }
             Some("max_tokens") => {
-                final_text.push_str("\n\n[truncated: max_tokens reached]");
+                final_text.push_str(
+                    "\n\n[truncated: max_tokens reached]",
+                );
                 break;
             }
             other => {
@@ -316,8 +321,7 @@ Guidelines:
   - When the user asks 'what epics / stories / bugs are open?' or anything about requirements, prefer the aida_* tools.
   - When the user clearly asks to save a substantive discussion summary, design note, or decision to a SPEC, use aida_comment_add sparingly.
   - When the user clearly asks to file work or a defect as a new SPEC, use aida_add sparingly.
-  // trace:STORY-24 | ai:agy
-  - When the user asks to plan, decompose, or seed implementation work on a spec, use aida_ultraplan.
+  - When the user asks to plan, decompose, or seed implementation work on a spec, use aida_ultraplan. // trace:STORY-24 | ai:agy
   - When the user asks about code or documentation contents, use grep_repo to locate things, then read_file to inspect specific files.
   - Be concise. Don't paste large file contents back to the user unless they ask.
 
@@ -380,16 +384,17 @@ async fn handle_event(
     };
     match event_name {
         "content_block_start" => {
-            let index = data.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let index = data
+                .get("index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
             let block_type = data
                 .get("content_block")
                 .and_then(|b| b.get("type"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             let block = match block_type {
-                "text" => PartialBlock::Text {
-                    text: String::new(),
-                },
+                "text" => PartialBlock::Text { text: String::new() },
                 "tool_use" => {
                     let id = data
                         .get("content_block")
@@ -409,15 +414,16 @@ async fn handle_event(
                         input_json: String::new(),
                     }
                 }
-                _ => PartialBlock::Text {
-                    text: String::new(),
-                },
+                _ => PartialBlock::Text { text: String::new() },
             };
             ensure_index(&mut state.blocks, index);
             state.blocks[index] = block;
         }
         "content_block_delta" => {
-            let index = data.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let index = data
+                .get("index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
             let delta = data.get("delta").cloned().unwrap_or(Value::Null);
             let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if index >= state.blocks.len() {
@@ -466,9 +472,7 @@ async fn handle_event(
 
 fn ensure_index(blocks: &mut Vec<PartialBlock>, index: usize) {
     while blocks.len() <= index {
-        blocks.push(PartialBlock::Text {
-            text: String::new(),
-        });
+        blocks.push(PartialBlock::Text { text: String::new() });
     }
 }
 

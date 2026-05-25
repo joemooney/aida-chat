@@ -6,7 +6,6 @@
 
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::Instant;
 
 use axum::extract::{Extension, Json as AxumJson, Path, Query};
 use axum::http::StatusCode;
@@ -27,9 +26,7 @@ use crate::messages::{
 };
 use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
-use crate::server::canned::CannedLibrary;
 use crate::server::config::{Backend, ServerConfig};
-use crate::server::query_log::{self, ServedFrom};
 use crate::server::sessions::SessionStore;
 use crate::server::tools::{aida, ToolError};
 
@@ -256,85 +253,18 @@ async fn chat_stream(
         return (StatusCode::NOT_FOUND, "unknown session_id").into_response();
     }
 
-    let started = Instant::now();
-    let query_id = match query_log::start_query(&state.cfg.repo_root, &params.session_id, &params.q)
-    {
-        Ok(id) => id,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
-    };
-
-    // trace:EPIC-26 | ai:codex
-    // Canned answers are checked before the agent loop so a match avoids
-    // the LLM path entirely while still producing normal SSE text/done.
-    match canned_answer_for_chat(&state, &params.session_id, &params.q, query_id, started).await {
-        Ok(Some(answer)) => {
-            let events = vec![AgentEvent::TextDelta(answer), AgentEvent::Done];
-            let stream = tokio_stream::iter(events.into_iter().map(event_to_sse));
-            return Sse::new(stream)
-                .keep_alive(KeepAlive::new())
-                .into_response();
-        }
-        Ok(None) => {}
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
-    }
-
     let (tx, rx) = mpsc::channel::<AgentEvent>(64);
     let cfg = state.cfg.clone();
     let sessions = state.sessions.clone();
     let session_id = params.session_id.clone();
     let user_text = params.q.clone();
-    let repo_root = state.cfg.repo_root.clone();
 
     tokio::spawn(async move {
         agent::run_turn(cfg, sessions, session_id, user_text, tx).await;
     });
 
-    let mut logged_completion = false;
-    let stream = ReceiverStream::new(rx).map(move |ev| {
-        if !logged_completion && matches!(ev, AgentEvent::Done | AgentEvent::Error(_)) {
-            logged_completion = true;
-            let latency_ms = started.elapsed().as_millis() as i64;
-            let _ = query_log::finish_query(&repo_root, query_id, latency_ms, ServedFrom::Llm);
-        }
-        event_to_sse(ev)
-    });
-    Sse::new(stream)
-        .keep_alive(KeepAlive::new())
-        .into_response()
-}
-
-async fn canned_answer_for_chat(
-    state: &ApiState,
-    session_id: &str,
-    query: &str,
-    query_id: i64,
-    started: Instant,
-) -> Result<Option<String>, String> {
-    let library = CannedLibrary::load(&state.cfg.repo_root)?;
-    let Some(answer) = library.match_query(query, &state.cfg) else {
-        return Ok(None);
-    };
-
-    state.sessions.append_user(session_id, query).await?;
-    state
-        .sessions
-        .commit_assistant_turn(
-            session_id,
-            vec![],
-            ChatTurn {
-                role: Role::Assistant,
-                text: answer.clone(),
-                tool_calls: vec![],
-            },
-        )
-        .await?;
-    query_log::finish_query(
-        &state.cfg.repo_root,
-        query_id,
-        started.elapsed().as_millis() as i64,
-        ServedFrom::Canned,
-    )?;
-    Ok(Some(answer))
+    let stream = ReceiverStream::new(rx).map(event_to_sse);
+    Sse::new(stream).keep_alive(KeepAlive::new()).into_response()
 }
 
 fn event_to_sse(ev: AgentEvent) -> Result<Event, Infallible> {
@@ -362,77 +292,5 @@ fn synthesize_empty_history(id: String) -> ChatHistory {
             text: "Hi! Ask about this repo or its requirements.".into(),
             tool_calls: vec![],
         }],
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use super::*;
-    use crate::server::sessions::InMemorySessions;
-
-    #[tokio::test]
-    async fn canned_chat_path_logs_and_updates_history_without_agent_loop() {
-        let root = temp_root("canned-chat");
-        std::fs::create_dir_all(root.join(".aida")).unwrap();
-        std::fs::write(
-            root.join(".aida/canned-answers.toml"),
-            r#"
-[[answers]]
-match = "hello"
-strategy = "exact"
-answer = "Hello from canned."
-"#,
-        )
-        .unwrap();
-        let cfg = Arc::new(fixture_cfg(root.clone()));
-        let sessions = Arc::new(InMemorySessions::new(cfg.clone()));
-        let session = sessions.create().await;
-        let state = ApiState {
-            sessions: sessions.clone(),
-            cfg,
-        };
-        let query_id = query_log::start_query(&root, &session.id, " hello ").unwrap();
-
-        let answer =
-            canned_answer_for_chat(&state, &session.id, " hello ", query_id, Instant::now())
-                .await
-                .unwrap();
-
-        assert_eq!(answer.as_deref(), Some("Hello from canned."));
-        let row = query_log::get_query(&root, query_id).unwrap().unwrap();
-        assert_eq!(row.served_from.as_deref(), Some("canned"));
-        let history = sessions.get(&session.id).await.unwrap();
-        assert_eq!(history.transcript.len(), 2);
-        assert_eq!(history.transcript[1].text, "Hello from canned.");
-    }
-
-    fn fixture_cfg(repo_root: PathBuf) -> ServerConfig {
-        ServerConfig {
-            backend: Backend::Anthropic,
-            anthropic_api_key: Some("test".into()),
-            model: "test".into(),
-            repo_root,
-            max_tool_iterations: 1,
-            max_output_tokens: 1,
-            max_read_bytes: 1,
-            session_ttl: std::time::Duration::from_secs(60),
-            mcp_command: PathBuf::from("aida"),
-            mcp_args: vec!["mcp-serve".into()],
-        }
-    }
-
-    fn temp_root(name: &str) -> PathBuf {
-        let mut root = std::env::temp_dir();
-        root.push(format!(
-            "aida-chat-{name}-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        root
     }
 }

@@ -143,7 +143,11 @@ mod tests {
     #[tokio::test]
     async fn finds_single_id_and_multi_id_traces() {
         let tmp = tempdir_for_test("traces-multi");
-        std::fs::write(tmp.join("a.rs"), "// trace:EPIC-1 | ai:claude\nfn a() {}\n").unwrap();
+        std::fs::write(
+            tmp.join("a.rs"),
+            "// trace:EPIC-1 | ai:claude\nfn a() {}\n",
+        )
+        .unwrap();
         std::fs::write(
             tmp.join("b.rs"),
             "// trace:STORY-3 EPIC-1 | ai:claude\nfn b() {}\n",
@@ -156,9 +160,10 @@ mod tests {
         .unwrap();
 
         let cfg = fixture_cfg(tmp.clone());
-        let out = find_traces(&cfg, &json!({"spec_id": "EPIC-1"}))
-            .await
-            .unwrap();
+        let out =
+            find_traces(&cfg, &json!({"spec_id": "EPIC-1"}))
+                .await
+                .unwrap();
         assert!(out.contains("a.rs:1:"), "missing a.rs match in {out:?}");
         assert!(out.contains("b.rs:1:"), "missing b.rs match in {out:?}");
         assert!(!out.contains("c.rs"), "c.rs should not match: {out:?}");
@@ -169,9 +174,10 @@ mod tests {
         let tmp = tempdir_for_test("traces-empty");
         std::fs::write(tmp.join("x.rs"), "fn x() {}\n").unwrap();
         let cfg = fixture_cfg(tmp);
-        let out = find_traces(&cfg, &json!({"spec_id": "EPIC-99"}))
-            .await
-            .unwrap();
+        let out =
+            find_traces(&cfg, &json!({"spec_id": "EPIC-99"}))
+                .await
+                .unwrap();
         assert!(out.starts_with("(no trace comments"), "{out:?}");
     }
 

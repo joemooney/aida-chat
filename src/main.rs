@@ -57,7 +57,9 @@ async fn main() {
             move || shell(opts.clone())
         })
         .nest("/api", api_router(sessions.clone(), cfg.clone()))
-        .fallback(leptos_axum::file_and_error_handler(move |opts| shell(opts)))
+        .fallback(leptos_axum::file_and_error_handler(move |opts| {
+            shell(opts)
+        }))
         .with_state(leptos_options);
 
     println!("AIDA Chat running at http://{addr}");
