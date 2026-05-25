@@ -5,6 +5,7 @@
 pub mod agent;
 pub mod api;
 pub mod backends;
+pub mod charts;
 pub mod config;
 pub mod mcp;
 pub mod sessions;

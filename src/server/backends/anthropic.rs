@@ -11,7 +11,7 @@ use futures::StreamExt;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
-use crate::messages::{ChatTurn, Role, ToolCall};
+use crate::messages::{ChartArtifact, ChatTurn, Role, ToolCall};
 use crate::server::agent::AgentEvent;
 use crate::server::config::ServerConfig;
 use crate::server::sessions::{AgentMessage, AssistantBlock, SessionStore, ToolResult};
@@ -44,6 +44,9 @@ pub async fn run_turn(
     let mut working: Vec<AgentMessage> = session.history.clone();
     let mut new_entries: Vec<AgentMessage> = vec![]; // suffix appended this turn
     let mut tool_calls: Vec<ToolCall> = vec![];
+    // trace:EPIC-29 | ai:claude — chart artifacts emitted this turn, persisted
+    // into the assistant ChatTurn so a /history replay still shows them.
+    let mut chart_artifacts: Vec<ChartArtifact> = vec![];
     let mut final_text = String::new();
 
     let client = reqwest::Client::builder()
@@ -101,9 +104,32 @@ pub async fn run_turn(
                 let mut results = vec![];
                 for (id, name, input) in tool_uses {
                     let started = Instant::now();
-                    let (output, ok) = match tools::dispatch(&cfg, &name, &input).await {
-                        Ok(s) => (s, true),
-                        Err(e) => (format!("error: {e}"), false),
+                    // trace:EPIC-29 | ai:claude
+                    // chart_* tools dispatch through `dispatch_chart` so the
+                    // SVG artifacts flow out-of-band via SSE. The model only
+                    // sees the short summary in its tool_result content —
+                    // saves tokens and keeps the conversation readable.
+                    let (output, ok) = if tools::is_chart_tool(&name) {
+                        match tools::dispatch_chart(&cfg, &name, &input).await {
+                            Ok(result) => {
+                                for art in &result.artifacts {
+                                    let msg_art = ChartArtifact {
+                                        kind: art.kind.to_string(),
+                                        svg: art.svg.clone(),
+                                        caption: art.caption.clone(),
+                                    };
+                                    chart_artifacts.push(msg_art.clone());
+                                    let _ = tx.send(AgentEvent::ChartArtifact(msg_art)).await;
+                                }
+                                (result.summary, true)
+                            }
+                            Err(e) => (format!("error: {e}"), false),
+                        }
+                    } else {
+                        match tools::dispatch(&cfg, &name, &input).await {
+                            Ok(s) => (s, true),
+                            Err(e) => (format!("error: {e}"), false),
+                        }
                     };
                     let call = completed_tool_call(name.clone(), input, output, ok, started);
                     tool_calls.push(call.clone());
@@ -148,6 +174,7 @@ pub async fn run_turn(
         role: Role::Assistant,
         text: final_text,
         tool_calls,
+        chart_artifacts,
     };
     if let Err(e) = sessions
         .commit_assistant_turn(&session_id, new_entries, transcript_turn)
@@ -318,6 +345,7 @@ You can answer questions about:
   - The project's tracked requirements stored in AIDA (use aida_list, aida_show, aida_search, aida_history).
   - The mapping from SPEC-IDs to code (use find_traces — see below).
   - Substrate artefacts beyond requirements (use aida_resource — see below).
+  - Agile metrics as visual charts (use chart_status, chart_sprint, chart_feature — see below).
 
 Attribution is the differentiator:
   - Every factual claim about this project must be attributed: cite the SPEC-ID for requirements claims and `path:line` for code claims. Plain narration without a SPEC-ID or path:line should be the exception, not the default.
@@ -331,6 +359,7 @@ Guidelines:
   - When the user clearly asks to file work or a defect as a new SPEC, use aida_add sparingly.
   - When the user clearly asks to save a pattern, principle, or correction as memory, use write_memory sparingly.
   - When the user asks about code or documentation contents, use grep_repo to locate things, then read_file to inspect specific files.
+  - When the user asks for a visualization of project state — 'show me', 'what's the status breakdown', 'sprint burndown', 'velocity trend', 'feature progress' — call chart_status / chart_sprint / chart_feature. They render inline below your reply. Don't paste the SVG into your text; the chart tool already pushed it to the chat surface. Just narrate what the chart shows.
   - Be concise. Don't paste large file contents back to the user unless they ask.
 
 The repo root is: {}",

@@ -122,6 +122,7 @@ impl SessionStore for InMemorySessions {
             role: Role::User,
             text: text.to_string(),
             tool_calls: vec![],
+            chart_artifacts: vec![],
         });
         s.last_active = Instant::now();
         Ok(())

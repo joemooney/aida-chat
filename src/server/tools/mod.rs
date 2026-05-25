@@ -5,6 +5,7 @@
 // tools shell out only to a fixed allowlist of subcommands.
 
 pub mod aida;
+pub mod charts;
 pub mod fs;
 pub mod grep;
 pub mod memory;
@@ -48,7 +49,38 @@ pub fn all_tool_specs() -> Vec<Tool> {
         aida::aida_resource_spec(),
         aida::aida_comment_add_spec(),
         aida::aida_add_spec(),
+        // trace:EPIC-29 | ai:claude
+        charts::chart_status_spec(),
+        charts::chart_sprint_spec(),
+        charts::chart_feature_spec(),
     ]
+}
+
+/// True iff `name` is one of the chart-rendering tools that emits
+/// SVG artifacts out-of-band. The anthropic backend dispatches these
+/// via `dispatch_chart` instead of the regular `dispatch` path so the
+/// artifacts can flow through SSE without round-tripping the SVG
+/// through the model.
+pub fn is_chart_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "chart_status" | "chart_sprint" | "chart_feature"
+    )
+}
+
+/// Chart-specific dispatch — returns a `ChartToolResult` carrying both
+/// a model-visible summary and a vec of `ChartArtifact`s for the UI.
+pub async fn dispatch_chart(
+    cfg: &ServerConfig,
+    name: &str,
+    input: &Value,
+) -> Result<charts::ChartToolResult, ToolError> {
+    match name {
+        "chart_status" => charts::chart_status(cfg, input).await,
+        "chart_sprint" => charts::chart_sprint(cfg, input).await,
+        "chart_feature" => charts::chart_feature(cfg, input).await,
+        other => Err(ToolError::NotAllowed(format!("unknown chart tool {other}"))),
+    }
 }
 
 /// Dispatch a tool_use block by name + raw JSON input. Returns the

@@ -542,3 +542,49 @@ html, body {
   outline: none;
   border-color: var(--accent);
 }
+
+/* --- EPIC-29: agile chart artifacts inline in chat --- */
+/* Gallery wraps every chart_* tool's output below the assistant message.
+   Each artifact stacks vertically; multiple artifacts (e.g. burn-down +
+   burn-up + velocity from chart_sprint) read top-to-bottom. */
+.chart-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 10px 0 4px;
+}
+.chart-gallery:empty { display: none; }
+
+.chart-artifact {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chart-svg {
+  display: flex;
+  justify-content: flex-start;
+}
+.chart-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 480px;
+}
+.chart-caption {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Sprint chart variants get a subtle accent border to read as a set. */
+.chart-burndown,
+.chart-burnup,
+.chart-velocity {
+  border-color: var(--accent-dim);
+}

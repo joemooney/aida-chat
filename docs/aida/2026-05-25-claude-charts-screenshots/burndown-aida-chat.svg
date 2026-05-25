@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" role="img" style="width:100%;max-width:480px;color:var(--text-dim,#8b93a3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;"><rect x="0.5" y="0.5" width="399" height="219" fill="none" stroke="currentColor" stroke-opacity="0.12" stroke-dasharray="4 4" rx="8"/>
+<text x="200" y="110" text-anchor="middle" fill="currentColor" font-size="11" font-style="italic">Not enough data for burndown — sprint needs a start_date and end_date in custom_fields.</text>
+</svg>

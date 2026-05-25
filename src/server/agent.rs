@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::messages::ToolCall;
+use crate::messages::{ChartArtifact, ToolCall};
 use crate::server::backends;
 use crate::server::config::{Backend, ServerConfig};
 use crate::server::sessions::SessionStore;
@@ -20,6 +20,13 @@ pub enum AgentEvent {
     TextDelta(String),
     /// A tool just finished (success or error).
     ToolCall(ToolCall),
+    /// trace:EPIC-29 | ai:claude
+    /// A `chart_*` tool produced a rendered SVG artifact. Flows
+    /// out-of-band from the tool's text result so the model doesn't
+    /// see the raw SVG bytes, only the summary. The SSE side
+    /// serializes this as event `chart` with the JSON-encoded
+    /// `ChartArtifact` as the data field.
+    ChartArtifact(ChartArtifact),
     /// Turn finished cleanly.
     Done,
     /// Fatal error during the turn; the channel will close right after.
