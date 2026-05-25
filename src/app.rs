@@ -11,7 +11,7 @@ use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
 #[cfg(feature = "hydrate")]
-use crate::messages::{ChatHistory, CommentResponse, SpecResponse};
+use crate::messages::{ChatHistory, CommentResponse, MemoryResponse, SpecResponse};
 use crate::messages::{ChatTurn, Role, ToolCall};
 
 // trace:STORY-21 | ai:claude
@@ -408,17 +408,19 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         }
     };
     let capture_view = match turn.role {
-        // trace:STORY-21 STORY-22 | ai:claude
-        // Capture affordances — only Assistant messages get them. The
-        // two components are deliberately rendered side-by-side without
-        // a shared abstraction: STORY-23 will give the third data point
-        // and a clearer factoring.
+        // trace:STORY-21 STORY-22 STORY-23 | ai:claude
+        // Three capture affordances per assistant message: comment on an
+        // existing SPEC, create a new SPEC, save as a memory file. Kept
+        // parallel (no shared abstraction) on purpose — see the post-PR
+        // factoring note at the bottom of this file.
         Role::Assistant => {
             let body_for_comment = turn.text.clone();
-            let body_for_spec = turn.text;
+            let body_for_spec = turn.text.clone();
+            let body_for_memory = turn.text;
             Some(view! {
                 <CommentCapture body_text=body_for_comment session_id=session_id/>
                 <SpecCapture body_text=body_for_spec session_id=session_id/>
+                <MemoryCapture body_text=body_for_memory session_id=session_id/>
             })
         }
         Role::User => None,
@@ -432,6 +434,53 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         </div>
     }
 }
+
+// =========================================================================
+// trace:STORY-21 STORY-22 STORY-23 | ai:claude
+//
+// Three parallel capture components: CommentCapture, SpecCapture,
+// MemoryCapture. They share a pattern (trigger button → inline form →
+// POST → success badge or inline error) but each has a domain-specific
+// field set, validator, badge formatter, and HTTP wire shape.
+//
+// FACTORING DECISION (STORY-23): keep them parallel.
+//
+// What's shared:
+//   * `<Show>` scaffold (is_open / badge / form gates)
+//   * StoredValue trick for re-prime on open
+//   * Save handler factored to dodge `Fn`/`FnOnce` mismatch in closures
+//   * Schedule_clear / 3s badge fade
+//
+// What differs:
+//   * Field count (2 / 3 / 4) and widget kind (input vs select vs
+//     textarea); each field has its own validator (SPEC-ID regex, slug
+//     regex, type enum, length caps)
+//   * Pre-fill heuristics (first-cited SPEC-ID, first-sentence title,
+//     empty slug)
+//   * Success badge wording ("Comment added to X" / "Created Y" /
+//     "Memory saved: Z")
+//   * Request/response types (CommentRequest/Response,
+//     SpecRequest/Response, MemoryRequest/Response)
+//   * Endpoint URL
+//
+// A generic `CaptureForm<FieldConfig>` would compress the outer
+// scaffold but force the field set to be type-erased
+// (`Vec<DynField>`, runtime field-name lookup) or impose heavy
+// const-generics. Either path loses the "field is a named signal"
+// affordance these components currently have, where typos are caught
+// at compile time and each save handler reads named fields directly.
+//
+// The three POST helpers are more amenable to factoring (only URL +
+// types vary) — a generic `post_typed::<Req, Resp>(url, body)` would
+// shrink ~60 LOC. Skipped here so the STORY-23 PR stays focused; flag
+// as a small follow-on if STORY-24 lands a fourth instance.
+//
+// Revisit this decision when:
+//   * A fourth capture instance lands and the variability matrix is
+//     stable across all four, OR
+//   * Two of the existing three need the same non-trivial new feature
+//     (multi-field validation, optimistic updates, error recovery).
+// =========================================================================
 
 // trace:STORY-21 | ai:claude
 //
@@ -827,6 +876,265 @@ fn save_spec(
     }
 }
 
+// trace:STORY-23 | ai:claude
+//
+// Inline memory-write capture form. Third instance of the capture-loop
+// UX (after CommentCapture + SpecCapture). Kept parallel to the others
+// for now — see the factoring note at the bottom of this file for why.
+//
+// The four `MemoryType` choices match the auto-memory `<types>` taxonomy
+// used by Claude Code globally (user / feedback / project / reference).
+// `feedback` is the default because "save this assistant message as a
+// memory" is overwhelmingly a "this is a correction or principle" intent.
+const MEMORY_TYPES: &[&str] = &["user", "feedback", "project", "reference"];
+const MEMORY_NAME_MAX: usize = 80;
+const MEMORY_DESCRIPTION_MAX: usize = 150;
+
+/// True iff `s` matches `^[a-z][a-z0-9_-]{0,79}$` — the brief's slug
+/// regex for memory file names. Hand-rolled to avoid a `regex` dep.
+pub fn is_valid_memory_name(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.is_empty() || b.len() > MEMORY_NAME_MAX {
+        return false;
+    }
+    if !b[0].is_ascii_lowercase() {
+        return false;
+    }
+    b[1..]
+        .iter()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+}
+
+fn is_valid_memory_type(s: &str) -> bool {
+    MEMORY_TYPES.contains(&s)
+}
+
+#[component]
+fn MemoryCapture(
+    /// Assistant message body — pre-populates the memory body.
+    body_text: String,
+    session_id: ReadSignal<Option<String>>,
+) -> impl IntoView {
+    let body_sv = StoredValue::new(body_text);
+
+    let (is_open, set_is_open) = signal(false);
+    let (name, set_name) = signal(String::new());
+    let (description, set_description) = signal(String::new());
+    let (mem_type, set_mem_type) = signal("feedback".to_string());
+    let (body, set_body) = signal(body_sv.get_value());
+    let (submitting, set_submitting) = signal(false);
+    let (error_msg, set_error_msg) = signal::<Option<String>>(None);
+    let (badge_msg, set_badge_msg) = signal::<Option<String>>(None);
+
+    view! {
+        <Show when=move || !is_open.get() && badge_msg.get().is_none()>
+            <div class="actions">
+                <button
+                    class="action-btn"
+                    on:click=move |_| {
+                        set_name.set(String::new());
+                        set_description.set(String::new());
+                        set_mem_type.set("feedback".to_string());
+                        set_body.set(body_sv.get_value());
+                        set_error_msg.set(None);
+                        set_is_open.set(true);
+                    }
+                    disabled=move || session_id.get().is_none()
+                    title="Save this message as a markdown memory under ~/.claude/projects/<slug>/memory/"
+                >
+                    "Save as memory"
+                </button>
+            </div>
+        </Show>
+        <Show when=move || badge_msg.get().is_some()>
+            <div class="capture-badge">
+                {move || badge_msg.get().unwrap_or_default()}
+            </div>
+        </Show>
+        <Show when=move || is_open.get()>
+            <div class="comment-form">
+                <label class="comment-row">
+                    <span class="comment-label">"Name (slug)"</span>
+                    <input
+                        class="memory-name-input"
+                        prop:value=move || name.get()
+                        on:input=move |ev| set_name.set(event_target_value(&ev))
+                        placeholder="e.g. login-edge-case"
+                        maxlength="80"
+                    />
+                </label>
+                <label class="comment-row">
+                    <span class="comment-label">"Description"</span>
+                    <input
+                        class="memory-description-input"
+                        prop:value=move || description.get()
+                        on:input=move |ev| set_description.set(event_target_value(&ev))
+                        placeholder="One-line summary of what this memory captures"
+                        maxlength="150"
+                    />
+                </label>
+                <label class="comment-row">
+                    <span class="comment-label">"Type"</span>
+                    <select
+                        class="spec-type-select"
+                        on:change=move |ev| set_mem_type.set(event_target_value(&ev))
+                        prop:value=move || mem_type.get()
+                    >
+                        <option value="user">"user"</option>
+                        <option value="feedback">"feedback"</option>
+                        <option value="project">"project"</option>
+                        <option value="reference">"reference"</option>
+                    </select>
+                </label>
+                <label class="comment-row">
+                    <span class="comment-label">"Body"</span>
+                    <textarea
+                        class="comment-text"
+                        prop:value=move || body.get()
+                        on:input=move |ev| set_body.set(event_target_value(&ev))
+                        rows="6"
+                    />
+                </label>
+                <Show when=move || error_msg.get().is_some()>
+                    <div class="comment-error">
+                        {move || error_msg.get().unwrap_or_default()}
+                    </div>
+                </Show>
+                <div class="comment-actions">
+                    <button
+                        class="save-btn"
+                        on:click=move |_| save_memory(
+                            session_id,
+                            name,
+                            description,
+                            mem_type,
+                            body,
+                            submitting,
+                            set_submitting,
+                            set_is_open,
+                            set_error_msg,
+                            set_badge_msg,
+                        )
+                        disabled=move || submitting.get()
+                    >
+                        {move || if submitting.get() { "Saving…" } else { "Save" }}
+                    </button>
+                    <button
+                        class="cancel-btn"
+                        on:click=move |_| {
+                            set_is_open.set(false);
+                            set_error_msg.set(None);
+                        }
+                        disabled=move || submitting.get()
+                    >
+                        "Cancel"
+                    </button>
+                </div>
+            </div>
+        </Show>
+    }
+}
+
+// trace:STORY-23 | ai:claude
+//
+// Save handler for MemoryCapture. Mirrors save_spec/save_comment.
+#[allow(clippy::too_many_arguments)]
+fn save_memory(
+    session_id: ReadSignal<Option<String>>,
+    name: ReadSignal<String>,
+    description: ReadSignal<String>,
+    mem_type: ReadSignal<String>,
+    body: ReadSignal<String>,
+    submitting: ReadSignal<bool>,
+    set_submitting: WriteSignal<bool>,
+    set_is_open: WriteSignal<bool>,
+    set_error_msg: WriteSignal<Option<String>>,
+    set_badge_msg: WriteSignal<Option<String>>,
+) {
+    if submitting.get_untracked() {
+        return;
+    }
+    let name_field = name.get_untracked().trim().to_string();
+    let description_field = description.get_untracked().trim().to_string();
+    let type_field = mem_type.get_untracked();
+    let body_field = body.get_untracked();
+
+    if !is_valid_memory_name(&name_field) {
+        set_error_msg.set(Some(
+            "Name must be lowercase kebab-slug: start with a letter, then \
+             letters/digits/hyphens/underscores (max 80 chars)."
+                .into(),
+        ));
+        return;
+    }
+    if description_field.is_empty() {
+        set_error_msg.set(Some("Description is required.".into()));
+        return;
+    }
+    if description_field.chars().count() > MEMORY_DESCRIPTION_MAX {
+        set_error_msg.set(Some(format!(
+            "Description must be {MEMORY_DESCRIPTION_MAX} chars or fewer."
+        )));
+        return;
+    }
+    if !is_valid_memory_type(&type_field) {
+        set_error_msg.set(Some(format!(
+            "Type must be one of {}.",
+            MEMORY_TYPES.join("/")
+        )));
+        return;
+    }
+    if body_field.trim().is_empty() {
+        set_error_msg.set(Some("Body is empty.".into()));
+        return;
+    }
+    let Some(sid) = session_id.get_untracked() else {
+        set_error_msg.set(Some("Session not ready yet.".into()));
+        return;
+    };
+    set_error_msg.set(None);
+    set_submitting.set(true);
+    #[cfg(feature = "hydrate")]
+    {
+        let name_for_badge = name_field.clone();
+        leptos::task::spawn_local(async move {
+            match post_memory(&sid, &name_field, &description_field, &type_field, &body_field).await
+            {
+                Ok((path, message)) => {
+                    set_submitting.set(false);
+                    set_is_open.set(false);
+                    let badge_text = if !path.trim().is_empty() {
+                        format!("Memory saved: {}", path.trim())
+                    } else if !message.trim().is_empty() {
+                        message
+                    } else {
+                        format!("Memory saved: {name_for_badge}.md")
+                    };
+                    set_badge_msg.set(Some(badge_text));
+                    schedule_clear(set_badge_msg);
+                }
+                Err(err) => {
+                    set_submitting.set(false);
+                    set_error_msg.set(Some(err));
+                }
+            }
+        });
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (
+            sid,
+            name_field,
+            description_field,
+            type_field,
+            body_field,
+            set_badge_msg,
+            set_is_open,
+        );
+        set_submitting.set(false);
+    }
+}
+
 #[component]
 fn ToolBadge(call: ToolCall) -> impl IntoView {
     let status = if call.ok { "ok" } else { "err" };
@@ -1005,6 +1313,67 @@ mod spec_id_tests {
         ] {
             assert!(!is_valid_spec_id(s), "{s:?} should be invalid");
         }
+    }
+}
+
+// trace:STORY-23 | ai:claude
+#[cfg(test)]
+mod memory_name_tests {
+    use super::is_valid_memory_name;
+
+    #[test]
+    fn accepts_valid_kebab_slugs() {
+        for s in [
+            "a",
+            "foo",
+            "foo-bar",
+            "foo_bar",
+            "abc123",
+            "login-edge-case",
+            "x-y-z-0-1-2",
+            "a_b_c",
+        ] {
+            assert!(is_valid_memory_name(s), "{s:?} should be valid");
+        }
+    }
+
+    #[test]
+    fn rejects_uppercase_and_bad_first_char() {
+        for s in [
+            "",         // empty
+            "Foo",      // uppercase first
+            "fooBar",   // uppercase in middle
+            "1foo",     // digit start
+            "-foo",     // hyphen start
+            "_foo",     // underscore start
+            " foo",     // whitespace start
+        ] {
+            assert!(!is_valid_memory_name(s), "{s:?} should be invalid");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_chars() {
+        for s in [
+            "foo/bar",  // slash
+            "foo.bar",  // dot
+            "..foo",    // dot-leading
+            "foo bar",  // space
+            "foo@bar",  // at-sign
+            "foo:bar",  // colon
+        ] {
+            assert!(!is_valid_memory_name(s), "{s:?} should be invalid");
+        }
+    }
+
+    #[test]
+    fn enforces_80_char_cap() {
+        let exactly_80: String = std::iter::once('a').chain(std::iter::repeat_n('b', 79)).collect();
+        assert_eq!(exactly_80.len(), 80);
+        assert!(is_valid_memory_name(&exactly_80));
+        let over_80: String = std::iter::once('a').chain(std::iter::repeat_n('b', 80)).collect();
+        assert_eq!(over_80.len(), 81);
+        assert!(!is_valid_memory_name(&over_80));
     }
 }
 
@@ -1218,6 +1587,73 @@ async fn post_spec(
         if parsed.ok {
             return Ok((
                 parsed.spec_id.unwrap_or_default(),
+                parsed.message.unwrap_or_default(),
+            ));
+        }
+        return Err(parsed.error.unwrap_or_else(|| format!("HTTP {status}")));
+    }
+    if (200..300).contains(&status) {
+        Ok((String::new(), body_text))
+    } else {
+        Err(format!("HTTP {status}: {}", body_text.trim()))
+    }
+}
+
+// trace:STORY-23 | ai:claude
+//
+// POST /api/sessions/{session_id}/memory with {name, description,
+// type, body}. Returns (path, message) on Ok; user-facing error
+// string on Err. Matches the contract:
+//   200 {"ok": true, "path": "/…/memory/foo.md", "message": "..."}
+//   400|500 {"ok": false, "error": "..."}
+#[cfg(feature = "hydrate")]
+async fn post_memory(
+    session_id: &str,
+    name: &str,
+    description: &str,
+    mem_type: &str,
+    body: &str,
+) -> Result<(String, String), String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{Headers, Request, RequestInit, Response};
+
+    let payload = serde_json::to_string(&crate::messages::MemoryRequest {
+        name: name.to_string(),
+        description: description.to_string(),
+        r#type: mem_type.to_string(),
+        body: body.to_string(),
+    })
+    .map_err(|e| format!("encode: {e}"))?;
+    let headers = Headers::new().map_err(|e| format!("headers: {e:?}"))?;
+    headers
+        .set("content-type", "application/json")
+        .map_err(|e| format!("set header: {e:?}"))?;
+
+    let opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_headers(&headers);
+    opts.set_body(&wasm_bindgen::JsValue::from_str(&payload));
+
+    let url = format!("/api/sessions/{session_id}/memory");
+    let req = Request::new_with_str_and_init(&url, &opts)
+        .map_err(|e| format!("request init: {e:?}"))?;
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_value = JsFuture::from(window.fetch_with_request(&req))
+        .await
+        .map_err(|e| format!("fetch: {e:?}"))?;
+    let resp: Response = resp_value.dyn_into().map_err(|_| "not a response")?;
+    let status = resp.status();
+    let text_promise = resp.text().map_err(|e| format!("text: {e:?}"))?;
+    let body_text = JsFuture::from(text_promise)
+        .await
+        .map_err(|e| format!("text await: {e:?}"))?
+        .as_string()
+        .unwrap_or_default();
+    if let Ok(parsed) = serde_json::from_str::<MemoryResponse>(&body_text) {
+        if parsed.ok {
+            return Ok((
+                parsed.path.unwrap_or_default(),
                 parsed.message.unwrap_or_default(),
             ));
         }
