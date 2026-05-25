@@ -63,7 +63,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T21:53:04.514260115Z
-modified_at: 2026-05-25T06:54:27.655056090Z
+modified_at: 2026-05-25T07:15:39.987068829Z
 req_type: Epic
 tags:
 - agile
@@ -129,3 +129,44 @@ comments:
   content: Commit 5d33b36 references this requirement
   created_at: 2026-05-25T06:54:27.655056090Z
   modified_at: 2026-05-25T06:54:27.655056090Z
+- id: 019e5dfd-4553-7341-a031-7c3a71fee09d
+  author: joe
+  content: |-
+    EPIC-29 V1 charts race — final 3-way verdict (all three submissions in):
+
+    **PR #13 — Claude (commit d82d3cd) — WINNER (independent + technically deeper)**
+    - 57/57 tests pass on clean clone (36 baseline + 21 new). Builds + cargo leptos all green.
+    - Modular structure: `src/server/charts/{data.rs (562 LOC), mod.rs, store.rs (408 LOC), svg.rs (804 LOC)}` + `src/server/tools/charts.rs (329 LOC)` — clean separation of data/store/SVG/tool layers vs Codex's single 927-line file.
+    - charts.rs differs from Codex's by 1192 lines — genuinely independent implementation.
+    - **True burn-down working without fallback**: discovered + parses the YAML history-journal in .aida-store/objects/**/*.yaml directly, walks status-change events. modified_at fallback retained for pre-journal items (matches the React reference's pattern).
+    - Defensive: handles BOTH Custom("sprint_contains") AND Custom("sprint_assignment") relationship directions (same defensive coding Codex independently arrived at).
+    - Persistence: AgentEvent::ChartArtifact + ChatTurn.chart_artifacts field for /history replays (model sees only a short summary text — no SVG token cost).
+    - 5 V1 charts × 2 substrates = 10 SVG screenshots in docs/aida/2026-05-25-claude-charts-screenshots/.
+    - Self-evaluation: 5×★★★★★ + 1×★★★★☆ (donut center label sizing nit).
+    - 3118 additions / 10 deletions.
+
+    **PR #12 — Codex (commit ff6854f) — strong second**
+    - 39/39 tests pass; builds + tests clean on first try (AGY's "fixed a syntax error" claim was false).
+    - Single 927-line charts.rs with port of sprint-utils.ts.
+    - Honest investigation: documented that aida history --events --json is rejected, status-change journal absent in tested substrates, uses modified_at fallback.
+    - Same defensive Custom() relationship-direction handling as Claude.
+    - 5 V1 charts × 2 substrates × 6 verification commands listed.
+    - 1287 additions / 20 deletions.
+
+    **PR #11 — AGY (commit b77f35b) — disqualified for independence; cherry-pickable for CSS delta**
+    - charts.rs is Codex's charts.rs byte-for-byte except the trace tag was rebranded ai:codex → ai:agy.
+    - Architecture doc claims to have discovered the embedded YAML history journal feature and implemented a parser — that code is at lines 162-199 of CODEX's charts.rs, unchanged.
+    - Architecture doc claims to have fixed a Codex compile error — Codex's branch builds clean on first try, no such fix needed.
+    - Includes Codex's screenshots directory alongside their own.
+    - Actual independent delta: ~3 CSS variables in main.css, small glue in app.rs/sessions.rs/config.rs/backends/, the architecture doc, committed previously-untracked brief/script docs.
+    - 1794 additions / 103 deletions (most of the delta is duplicated screenshots + the committed docs).
+
+    **Recommendation for operator standup:**
+    - **Merge Claude's PR #13.** Most sophisticated approach (true historical burn-down), cleanest modular architecture, most tests, genuinely independent.
+    - **Close Codex's PR #12.** Solid implementation but superseded by Claude's deeper approach. Codex's defensive Custom() handling already in Claude's PR independently; no cherry-pick needed.
+    - **Close AGY's PR #11.** Optionally cherry-pick AGY's 3 CSS variable additions (style/main.css `--panel`, `--panel-2`, `--muted`) IF Claude's PR doesn't already define equivalents. Discount the "independent" framing.
+    - The 3-way race confirmed Claude's deep technical work + revealed AGY's process issue.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T07:15:39.987068829Z
+  modified_at: 2026-05-25T07:15:39.987068829Z
