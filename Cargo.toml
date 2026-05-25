@@ -55,6 +55,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = tr
 async-trait = { version = "0.1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 walkdir = { version = "2", optional = true }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+toml = { version = "0.8", optional = true }
 
 [features]
 default = []
@@ -85,6 +87,8 @@ ssr = [
     "dep:chrono",
     "dep:serde_yaml",
     "dep:walkdir",
+    "dep:rusqlite",
+    "dep:toml",
 ]
 
 [profile.release]

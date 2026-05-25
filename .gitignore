@@ -15,6 +15,10 @@
 
 # Tracked exceptions: project-level config that lives in the repo.
 !.aida/config.toml
+!.aida/canned-answers.toml
+
+# aida-chat local query log and other per-project runtime files.
+.aida-chat/
 
 # Rust build artifacts (Cargo.lock IS committed — this is an app, not a library)
 /target/
@@ -25,4 +29,3 @@
 
 # Leptos generated site bundle
 /site/
-
