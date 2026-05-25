@@ -6,6 +6,7 @@
 
 pub mod aida;
 pub mod charts;
+pub mod drift;
 pub mod fs;
 pub mod grep;
 pub mod memory;
@@ -53,6 +54,7 @@ pub fn all_tool_specs() -> Vec<Tool> {
         charts::chart_status_spec(),
         charts::chart_sprint_spec(),
         charts::chart_feature_spec(),
+        drift::verify_trace_drift_spec(),
     ]
 }
 
@@ -85,11 +87,7 @@ pub async fn dispatch_chart(
 
 /// Dispatch a tool_use block by name + raw JSON input. Returns the
 /// text the agent will see as `tool_result.content`.
-pub async fn dispatch(
-    cfg: &ServerConfig,
-    name: &str,
-    input: &Value,
-) -> Result<String, ToolError> {
+pub async fn dispatch(cfg: &ServerConfig, name: &str, input: &Value) -> Result<String, ToolError> {
     match name {
         "read_file" => fs::read_file(cfg, input).await,
         "list_directory" => fs::list_directory(cfg, input).await,
@@ -103,6 +101,7 @@ pub async fn dispatch(
         "aida_resource" => aida::aida_resource(cfg, input).await,
         "aida_comment_add" => aida::aida_comment_add(cfg, input).await,
         "aida_add" => aida::aida_add(cfg, input).await,
+        "verify_trace_drift" => drift::verify_trace_drift(cfg, input).await,
         other => Err(ToolError::NotAllowed(format!("unknown tool {other}"))),
     }
 }

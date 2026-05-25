@@ -12,7 +12,7 @@ use leptos_router::path;
 
 #[cfg(feature = "hydrate")]
 use crate::messages::{ChatHistory, CommentResponse, MemoryResponse, SpecResponse};
-use crate::messages::{ChartArtifact, ChatTurn, Role, ToolCall};
+use crate::messages::{ChartArtifact, ChatTurn, Role, ToolCall, TraceFinding, VerifyDriftResponse};
 
 // trace:STORY-21 | ai:claude
 //
@@ -129,6 +129,25 @@ pub fn extract_first_spec_id(text: &str) -> Option<String> {
     None
 }
 
+// trace:STORY-25 | ai:codex
+pub fn drift_severity_class(finding: &TraceFinding) -> &'static str {
+    if finding.aligned {
+        return "drift-severity ok";
+    }
+    match finding.severity.as_str() {
+        "major" => "drift-severity major",
+        "minor" => "drift-severity minor",
+        _ => "drift-severity minor",
+    }
+}
+
+pub fn drift_comment_body(spec_id: &str, finding: &TraceFinding) -> String {
+    format!(
+        "Trace drift flagged for {spec_id} at {}:{} — {}",
+        finding.path, finding.line, finding.reason
+    )
+}
+
 /// Render an assistant message's markdown body to safe-ish HTML.
 /// We strip raw HTML events from the markdown stream so the model
 /// can't inject `<script>` (or any other tag) by writing it verbatim
@@ -141,8 +160,8 @@ fn render_markdown(src: &str) -> String {
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_FOOTNOTES);
-    let parser = Parser::new_ext(src, opts)
-        .filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_)));
+    let parser =
+        Parser::new_ext(src, opts).filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_)));
     let mut out = String::new();
     html::push_html(&mut out, parser);
     out
@@ -428,11 +447,13 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         Role::Assistant => {
             let body_for_comment = turn.text.clone();
             let body_for_spec = turn.text.clone();
-            let body_for_memory = turn.text;
+            let body_for_memory = turn.text.clone();
+            let body_for_drift = turn.text;
             Some(view! {
                 <CommentCapture body_text=body_for_comment session_id=session_id/>
                 <SpecCapture body_text=body_for_spec session_id=session_id/>
                 <MemoryCapture body_text=body_for_memory session_id=session_id/>
+                <DriftCapture body_text=body_for_drift session_id=session_id/>
             })
         }
         Role::User => None,
@@ -669,14 +690,14 @@ fn save_comment(
 fn schedule_clear(set_badge_msg: WriteSignal<Option<String>>) {
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let cb = Closure::<dyn FnMut()>::new(move || {
         set_badge_msg.set(None);
     });
-    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-        cb.as_ref().unchecked_ref(),
-        3000,
-    );
+    let _ = window
+        .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 3000);
     cb.forget();
 }
 
@@ -907,6 +928,194 @@ pub fn is_valid_memory_name(s: &str) -> bool {
     b[1..]
         .iter()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+}
+
+// trace:STORY-25 | ai:codex
+#[component]
+fn DriftCapture(
+    /// Assistant message body — scanned for the first SPEC-ID to verify.
+    body_text: String,
+    session_id: ReadSignal<Option<String>>,
+) -> impl IntoView {
+    let Some(initial_spec_id) = extract_first_spec_id(&body_text) else {
+        return view! {}.into_any();
+    };
+    let spec_sv = StoredValue::new(initial_spec_id);
+    let (submitting, set_submitting) = signal(false);
+    let (error_msg, set_error_msg) = signal::<Option<String>>(None);
+    let (badge_msg, set_badge_msg) = signal::<Option<String>>(None);
+    let (result, set_result) = signal::<Option<VerifyDriftResponse>>(None);
+
+    let run_verify = move |_| {
+        if submitting.get_untracked() {
+            return;
+        }
+        let Some(sid) = session_id.get_untracked() else {
+            set_error_msg.set(Some("Session not ready yet.".into()));
+            return;
+        };
+        let spec_id = spec_sv.get_value();
+        set_error_msg.set(None);
+        set_result.set(None);
+        set_submitting.set(true);
+        #[cfg(feature = "hydrate")]
+        {
+            leptos::task::spawn_local(async move {
+                match post_verify_drift(&sid, &spec_id).await {
+                    Ok(response) => {
+                        set_submitting.set(false);
+                        set_result.set(Some(response));
+                    }
+                    Err(err) => {
+                        set_submitting.set(false);
+                        set_error_msg.set(Some(err));
+                    }
+                }
+            });
+        }
+        #[cfg(not(feature = "hydrate"))]
+        {
+            let _ = (sid, spec_id);
+            set_submitting.set(false);
+        }
+    };
+
+    let rows = move || {
+        let Some(response) = result.get() else {
+            return view! {}.into_any();
+        };
+        response
+            .findings
+            .into_iter()
+            .map(|finding| {
+                let class = drift_severity_class(&finding);
+                let marker = if finding.aligned { "✓" } else { "!" };
+                let spec_id = spec_sv.get_value();
+                let click_spec_id = spec_id.clone();
+                let label_spec_id = spec_id.clone();
+                let comment_finding = finding.clone();
+                view! {
+                    <tr>
+                        <td class="drift-path">{finding.path.clone()}</td>
+                        <td class="drift-line">{finding.line}</td>
+                        <td>
+                            <span class=class>{marker} " " {finding.severity.clone()}</span>
+                        </td>
+                        <td>{finding.reason.clone()}</td>
+                        <td>
+                            <button
+                                class="drift-comment-btn"
+                                disabled=move || session_id.get().is_none()
+                                on:click=move |_| file_drift_comment(
+                                    session_id,
+                                    click_spec_id.clone(),
+                                    comment_finding.clone(),
+                                    set_error_msg,
+                                    set_badge_msg,
+                                )
+                            >
+                                "File as comment on " {label_spec_id}
+                            </button>
+                        </td>
+                    </tr>
+                }
+            })
+            .collect_view()
+            .into_any()
+    };
+
+    view! {
+        <div class="actions">
+            <button
+                class="action-btn"
+                on:click=run_verify
+                disabled=move || submitting.get() || session_id.get().is_none()
+                title="Verify trace comments for this SPEC-ID"
+            >
+                {move || if submitting.get() {
+                    format!("Verifying {}…", spec_sv.get_value())
+                } else {
+                    format!("Verify trace drift for {}", spec_sv.get_value())
+                }}
+            </button>
+        </div>
+        <Show when=move || badge_msg.get().is_some()>
+            <div class="capture-badge">
+                {move || badge_msg.get().unwrap_or_default()}
+            </div>
+        </Show>
+        <Show when=move || error_msg.get().is_some()>
+            <div class="comment-error drift-error">
+                {move || error_msg.get().unwrap_or_default()}
+            </div>
+        </Show>
+        <Show when=move || result.get().is_some()>
+            <div class="drift-panel">
+                <div class="drift-summary">
+                    {move || result.get().and_then(|r| r.message).unwrap_or_default()}
+                </div>
+                <Show when=move || result.get().map(|r| r.truncated).unwrap_or(false)>
+                    <div class="drift-truncated">"Only the first 10 trace sites were checked."</div>
+                </Show>
+                <Show
+                    when=move || result.get().map(|r| !r.findings.is_empty()).unwrap_or(false)
+                    fallback=|| view! { <div class="drift-empty">"No trace sites found."</div> }
+                >
+                    <div class="drift-table-wrap">
+                        <table class="drift-table">
+                            <thead>
+                                <tr>
+                                    <th>"Path"</th>
+                                    <th>"Line"</th>
+                                    <th>"Severity"</th>
+                                    <th>"Reason"</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>{rows}</tbody>
+                        </table>
+                    </div>
+                </Show>
+            </div>
+        </Show>
+    }
+    .into_any()
+}
+
+fn file_drift_comment(
+    session_id: ReadSignal<Option<String>>,
+    spec_id: String,
+    finding: TraceFinding,
+    set_error_msg: WriteSignal<Option<String>>,
+    set_badge_msg: WriteSignal<Option<String>>,
+) {
+    let Some(sid) = session_id.get_untracked() else {
+        set_error_msg.set(Some("Session not ready yet.".into()));
+        return;
+    };
+    let body = drift_comment_body(&spec_id, &finding);
+    set_error_msg.set(None);
+    #[cfg(feature = "hydrate")]
+    {
+        leptos::task::spawn_local(async move {
+            match post_comment(&sid, &spec_id, &body).await {
+                Ok(message) => {
+                    let badge = if message.trim().is_empty() {
+                        format!("Comment added to {spec_id}")
+                    } else {
+                        message
+                    };
+                    set_badge_msg.set(Some(badge));
+                    schedule_clear(set_badge_msg);
+                }
+                Err(err) => set_error_msg.set(Some(err)),
+            }
+        });
+    }
+    #[cfg(not(feature = "hydrate"))]
+    {
+        let _ = (sid, spec_id, body, set_badge_msg);
+    }
 }
 
 fn is_valid_memory_type(s: &str) -> bool {
@@ -1303,7 +1512,10 @@ pub fn dev_fixture_tool_calls() -> Vec<ToolCall> {
 // trace:STORY-21 | ai:claude
 #[cfg(test)]
 mod spec_id_tests {
-    use super::{extract_first_spec_id, is_valid_spec_id};
+    use super::{
+        drift_comment_body, drift_severity_class, extract_first_spec_id, is_valid_spec_id,
+    };
+    use crate::messages::TraceFinding;
 
     #[test]
     fn extracts_first_cited_spec_id() {
@@ -1350,10 +1562,7 @@ mod spec_id_tests {
         // Boundary at start of string.
         assert_eq!(extract_first_spec_id("EPIC-1"), Some("EPIC-1".into()));
         // Boundary at end of string.
-        assert_eq!(
-            extract_first_spec_id("(EPIC-1)").as_deref(),
-            Some("EPIC-1")
-        );
+        assert_eq!(extract_first_spec_id("(EPIC-1)").as_deref(), Some("EPIC-1"));
         // Adjacent punctuation OK.
         assert_eq!(
             extract_first_spec_id("Reference: STORY-42, please."),
@@ -1369,7 +1578,9 @@ mod spec_id_tests {
 
     #[test]
     fn is_valid_spec_id_accepts_known_prefixes() {
-        for s in ["EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2"] {
+        for s in [
+            "EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2",
+        ] {
             assert!(is_valid_spec_id(s), "{s:?} should be valid");
         }
     }
@@ -1463,6 +1674,38 @@ mod spec_id_tests {
         ] {
             assert!(!is_valid_spec_id(s), "{s:?} should be invalid");
         }
+    }
+
+    #[test]
+    fn drift_helpers_render_mixed_severity_findings() {
+        let ok = TraceFinding {
+            path: "src/app.rs".into(),
+            line: 10,
+            aligned: true,
+            severity: "ok".into(),
+            reason: "still aligned".into(),
+        };
+        let minor = TraceFinding {
+            path: "src/server/api.rs".into(),
+            line: 20,
+            aligned: false,
+            severity: "minor".into(),
+            reason: "small mismatch".into(),
+        };
+        let major = TraceFinding {
+            path: "src/server/tools/aida.rs".into(),
+            line: 30,
+            aligned: false,
+            severity: "major".into(),
+            reason: "implements a different contract".into(),
+        };
+        assert_eq!(drift_severity_class(&ok), "drift-severity ok");
+        assert_eq!(drift_severity_class(&minor), "drift-severity minor");
+        assert_eq!(drift_severity_class(&major), "drift-severity major");
+        assert_eq!(
+            drift_comment_body("STORY-25", &major),
+            "Trace drift flagged for STORY-25 at src/server/tools/aida.rs:30 — implements a different contract"
+        );
     }
 }
 
@@ -1657,8 +1900,8 @@ async fn fetch_history(session_id: &str) -> Result<ChatHistory, String> {
     let opts = RequestInit::new();
     opts.set_method("GET");
     let url = format!("/api/sessions/{session_id}/history");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1708,8 +1951,8 @@ async fn post_comment(session_id: &str, spec_id: &str, text: &str) -> Result<Str
     opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
 
     let url = format!("/api/sessions/{session_id}/comment");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1772,8 +2015,8 @@ async fn post_spec(
     opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
 
     let url = format!("/api/sessions/{session_id}/spec");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1866,6 +2109,50 @@ async fn post_memory(
         Ok((String::new(), body_text))
     } else {
         Err(format!("HTTP {status}: {}", body_text.trim()))
+    }
+}
+
+// trace:STORY-25 | ai:codex
+#[cfg(feature = "hydrate")]
+async fn post_verify_drift(session_id: &str, spec_id: &str) -> Result<VerifyDriftResponse, String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{Headers, Request, RequestInit, Response};
+
+    let body = serde_json::to_string(&crate::messages::VerifyDriftRequest {
+        spec_id: spec_id.to_string(),
+    })
+    .map_err(|e| format!("encode: {e}"))?;
+    let headers = Headers::new().map_err(|e| format!("headers: {e:?}"))?;
+    headers
+        .set("content-type", "application/json")
+        .map_err(|e| format!("set header: {e:?}"))?;
+
+    let opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_headers(&headers);
+    opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
+
+    let url = format!("/api/sessions/{session_id}/verify-drift");
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_value = JsFuture::from(window.fetch_with_request(&req))
+        .await
+        .map_err(|e| format!("fetch: {e:?}"))?;
+    let resp: Response = resp_value.dyn_into().map_err(|_| "not a response")?;
+    let status = resp.status();
+    let text_promise = resp.text().map_err(|e| format!("text: {e:?}"))?;
+    let body_text = JsFuture::from(text_promise)
+        .await
+        .map_err(|e| format!("text await: {e:?}"))?
+        .as_string()
+        .unwrap_or_default();
+    match serde_json::from_str::<VerifyDriftResponse>(&body_text) {
+        Ok(parsed) if parsed.ok => Ok(parsed),
+        Ok(parsed) => Err(parsed.error.unwrap_or_else(|| format!("HTTP {status}"))),
+        Err(e) if (200..300).contains(&status) => Err(format!("decode: {e}")),
+        Err(_) => Err(format!("HTTP {status}: {}", body_text.trim())),
     }
 }
 
@@ -1987,7 +2274,10 @@ fn stream_chat(
             if let Some(es) = es_holder.borrow_mut().take() {
                 es.close();
             }
-            let msg = ev.data().as_string().unwrap_or_else(|| "stream error".into());
+            let msg = ev
+                .data()
+                .as_string()
+                .unwrap_or_else(|| "stream error".into());
             on_error(msg);
         });
         es.add_event_listener_with_callback("err", cb.as_ref().unchecked_ref())

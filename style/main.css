@@ -588,3 +588,103 @@ html, body {
 .chart-velocity {
   border-color: var(--accent-dim);
 }
+
+/* --- STORY-25: trace-drift verification affordance --- */
+.drift-error {
+  margin-top: 6px;
+  text-align: right;
+}
+.drift-panel {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.drift-summary {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.drift-truncated {
+  color: #f2c36b;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.drift-empty {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.drift-table-wrap {
+  overflow-x: auto;
+}
+.drift-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.drift-table th,
+.drift-table td {
+  border-top: 1px solid var(--border);
+  padding: 7px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.drift-table th {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.drift-path {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.drift-line {
+  font-family: var(--mono);
+  color: var(--text-dim);
+  width: 1%;
+}
+.drift-severity {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.drift-severity.ok {
+  color: #9be28f;
+  background: rgba(95, 190, 120, 0.12);
+  border: 1px solid rgba(95, 190, 120, 0.35);
+}
+.drift-severity.minor {
+  color: #f2c36b;
+  background: rgba(242, 195, 107, 0.12);
+  border: 1px solid rgba(242, 195, 107, 0.35);
+}
+.drift-severity.major {
+  color: var(--error);
+  background: rgba(255, 107, 107, 0.10);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+}
+.drift-comment-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.drift-comment-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+.drift-comment-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

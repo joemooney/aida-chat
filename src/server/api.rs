@@ -23,7 +23,8 @@ use tokio_stream::StreamExt;
 
 use crate::messages::{
     ChatHistory, ChatTurn, CommentRequest, CommentResponse, CreateSessionResponse, MemoryRequest,
-    MemoryResponse, Role, ServerInfo, SpecRequest, SpecResponse,
+    MemoryResponse, Role, ServerInfo, SpecRequest, SpecResponse, VerifyDriftRequest,
+    VerifyDriftResponse,
 };
 use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
@@ -31,7 +32,7 @@ use crate::server::canned::CannedLibrary;
 use crate::server::config::{Backend, ServerConfig};
 use crate::server::query_log::{self, ServedFrom};
 use crate::server::sessions::SessionStore;
-use crate::server::tools::{aida, memory, ToolError};
+use crate::server::tools::{aida, drift, memory, ToolError};
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -51,6 +52,7 @@ pub fn router(sessions: Arc<dyn SessionStore>, cfg: Arc<ServerConfig>) -> Router
         .route("/sessions/{id}/comment", post(add_comment))
         .route("/sessions/{id}/spec", post(add_spec))
         .route("/sessions/{id}/memory", post(add_memory))
+        .route("/sessions/{id}/verify-drift", post(verify_drift))
         .route("/chat", get(chat_stream))
         .layer(Extension(state))
 }
@@ -239,6 +241,36 @@ fn memory_error(status: StatusCode, error: String) -> (StatusCode, Json<MemoryRe
         Json(MemoryResponse {
             ok: false,
             path: None,
+            message: None,
+            error: Some(error),
+        }),
+    )
+}
+
+// trace:STORY-25 | ai:codex
+async fn verify_drift(
+    Extension(state): Extension<ApiState>,
+    Path(id): Path<String>,
+    AxumJson(body): AxumJson<VerifyDriftRequest>,
+) -> (StatusCode, Json<VerifyDriftResponse>) {
+    if state.sessions.get(&id).await.is_none() {
+        return drift_error(StatusCode::NOT_FOUND, "unknown session_id".into());
+    }
+
+    match drift::verify_trace_drift_for_spec(&state.cfg, &body.spec_id).await {
+        Ok(response) => (StatusCode::OK, Json(response)),
+        Err(ToolError::BadInput(e)) => drift_error(StatusCode::BAD_REQUEST, e),
+        Err(e) => drift_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn drift_error(status: StatusCode, error: String) -> (StatusCode, Json<VerifyDriftResponse>) {
+    (
+        status,
+        Json(VerifyDriftResponse {
+            ok: false,
+            findings: vec![],
+            truncated: false,
             message: None,
             error: Some(error),
         }),
