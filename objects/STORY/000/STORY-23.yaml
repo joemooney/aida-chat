@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:18.630304019Z
-modified_at: 2026-05-24T22:14:38.001212402Z
+modified_at: 2026-05-25T01:51:14.644763988Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -29,3 +29,39 @@ comments:
   content: Commit 5b2e1fa references this requirement
   created_at: 2026-05-24T22:14:38.001212402Z
   modified_at: 2026-05-24T22:14:38.001212402Z
+- id: 019e5cd4-40d4-7940-9da3-d52976fab712
+  author: joe
+  content: |-
+    Advisor verdict on both halves of STORY-23 — backend (PR #6, commit 5b2e1fa) and frontend (PR #7, commit 1016588).
+
+    **Both cleared to merge.** Verified independently on detached worktrees:
+
+    **PR #6 (Codex, backend):**
+    - 44/44 tests pass on a clean clone at 5b2e1fa.
+    - Security envelope is *tight*. The confinement test specifically: (a) creates a symlink in `memory_dir` pointing to a path OUTSIDE memory_dir, then (b) verifies `resolve_within_memory_dir` rejects it. Plus `filename_validators` covers `foo/bar`, `..`, `.foo`, `foo.md`, empty, > 80 chars. That's the exact attack vector for the first-tool-writing-outside-repo-confinement decision.
+    - Atomic-write uses temp-in-same-dir + rename + cleanup-on-error. Correct atomicity guarantee on POSIX.
+    - MEMORY.md update is idempotent (replace-not-duplicate), verified by `memory_index_replaces_not_duplicates` test.
+    - Tool registered in `tools/mod.rs` + `backends/anthropic.rs` tool list + system prompt hint as specified.
+    - Manual smoke verified end-to-end with cleanup.
+    - Scope tight — no aida.rs changes, no claude-cli touch.
+
+    **PR #7 (Claude, frontend):**
+    - 45/45 tests pass; ssr + hydrate + cargo leptos all green per report.
+    - Stub markers prominent, will drop at integration cleanly (same pattern as STORY-21/22).
+    - Field validation mirrors server-side (name slug regex, type enum, description cap, body non-empty).
+    - Factoring decision: kept three parallel components (CommentCapture + SpecCapture + new MemoryCapture). Rationale block at src/app.rs:438 in the diff explains the revisit triggers. Defensible read — the three components share UX shape but differ in field config + result formatting. The HTTP helpers (post_comment/post_spec/post_memory) ARE more amenable to a `post_typed<Req,Resp>` factoring, which Claude flagged for STORY-24+ if a fourth instance arrives. Good restraint.
+
+    **Contract compatibility — byte-identical this time.** Both PRs independently produced the same `MemoryRequest`/`MemoryResponse` struct with identical field order, identical serde attributes, identical r#type convention. The only differences are doc-comment wording. Integration is mechanically trivial:
+    - messages.rs: choose either MemoryRequest/MemoryResponse definition (they're equivalent); keep Claude's separate `memory_contract_tests` mod (5 tests, cleaner separation), drop Codex's inline test addition inside `spec_contract_tests` (avoids module bloat).
+    - api.rs: drop Claude's stub route + add_memory_stub fn; keep Codex's real `add_memory` handler.
+    - No other files touch the same content.
+
+    **Suggested merge order when operator returns:**
+    1. PR #6 first (lands the real handler + tool + types)
+    2. PR #7 second (rebases on master; resolve the messages.rs duplication by keeping Claude's test mod + Codex's struct definitions; drop the stub)
+
+    After both land: STORY-23 → Completed.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T01:51:14.644763988Z
+  modified_at: 2026-05-25T01:51:14.644763988Z
