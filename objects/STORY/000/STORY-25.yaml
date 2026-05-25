@@ -3,12 +3,12 @@ spec_id: STORY-25
 agreed_id: STORY-25
 title: 'aida-chat feedback loop 5: chat → trace gap detection'
 description: 'Periodically scan project for // trace: comments and ask LLM ''does this code still implement what SPEC-X describes?'' Surfaces code↔spec drift. Offer batch actions: update SPEC, add comment flagging drift, or file follow-up TASK. Most-substrate-aware of the five loops. trace:EPIC-16'
-status: Approved
+status: InProgress
 priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:32.464806097Z
-modified_at: 2026-05-24T15:39:32.464806097Z
+modified_at: 2026-05-25T07:31:04.285488940Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
