@@ -332,14 +332,8 @@ fn ChatPage() -> impl IntoView {
                 <Show when=move || streaming.get()>
                     <div class="turn assistant streaming">
                         <div class="role">"assistant"</div>
-                        <div class="tools">
-                            {move || {
-                                live_tools.get()
-                                    .into_iter()
-                                    .map(|tc| view! { <ToolBadge call=tc/> })
-                                    .collect_view()
-                            }}
-                        </div>
+                        // trace:STORY-14 | ai:claude — same ToolStrip drives live + historical.
+                        <ToolStrip tool_calls=live_tools.into()/>
                         <div class="text markdown" inner_html=move || render_markdown(&live_text.get())/>
                         <span class="cursor">"▌"</span>
                     </div>
@@ -383,15 +377,16 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         Role::User => "you",
         Role::Assistant => "assistant",
     };
+    // trace:STORY-14 | ai:claude
+    // ToolStrip wants a Signal so live and historical paths share one
+    // component. For historical turns the data is immutable, so wrap
+    // it in a StoredValue-backed derived signal.
     let has_tools = !turn.tool_calls.is_empty();
     let tools_view = if has_tools {
-        let badges = turn
-            .tool_calls
-            .clone()
-            .into_iter()
-            .map(|tc| view! { <ToolBadge call=tc/> })
-            .collect_view();
-        Some(view! { <div class="tools">{badges}</div> })
+        let stored = StoredValue::new(turn.tool_calls.clone());
+        let tool_calls_signal: Signal<Vec<ToolCall>> =
+            Signal::derive(move || stored.get_value());
+        Some(view! { <ToolStrip tool_calls=tool_calls_signal/> })
     } else {
         None
     };
@@ -1135,15 +1130,161 @@ fn save_memory(
     }
 }
 
-#[component]
-fn ToolBadge(call: ToolCall) -> impl IntoView {
-    let status = if call.ok { "ok" } else { "err" };
-    let title = call.input.to_string();
-    view! {
-        <span class=format!("tool-badge {status}") title=title>
-            <span class="tool-name">{call.name.clone()}</span>
-        </span>
+// =========================================================================
+// trace:STORY-14 | ai:claude
+//
+// Tool-call inspector UI. Clicking a tool badge expands an inline
+// <ToolCallPanel> below the message that shows the full tool input
+// (pretty-printed JSON), the full output, the duration, and the
+// success/failure status. The chat shell stays put; nothing is
+// modal/overlay.
+//
+// `ChatTurn.tool_calls` is `Vec<ToolCall>` from the SSE event + history
+// endpoint directly (Codex's STORY-14 backend PR landed first). The
+// frontend consumes it without any per-tool conversion.
+// =========================================================================
+
+/// Format a duration in milliseconds: under a second → integer ms
+/// (`42 ms`), at-or-above a second → one-decimal s (`1.2 s`).
+pub fn format_duration_ms(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{ms} ms")
+    } else {
+        let secs = ms as f64 / 1000.0;
+        format!("{secs:.1} s")
     }
+}
+
+/// Reusable tool-call strip: renders a row of clickable badges, plus
+/// (below) inline `<ToolCallPanel>`s for whichever badges the operator
+/// has expanded. Same component drives both the live SSE stream and
+/// the historical-turn render path.
+///
+/// The `expanded` set is component-local, so each TurnView (and the
+/// live streaming turn) gets its own independent panel state. Multiple
+/// panels can be open simultaneously — operator may want to compare
+/// `aida_list` output to `find_traces` output side by side.
+#[component]
+fn ToolStrip(
+    /// Reactive source of tool calls. Live render passes a streaming
+    /// `live_tools.into()`; historical render derives from the stored
+    /// turn vector.
+    tool_calls: Signal<Vec<ToolCall>>,
+) -> impl IntoView {
+    use std::collections::HashSet;
+    let (expanded, set_expanded) = signal::<HashSet<usize>>(HashSet::new());
+
+    view! {
+        <div class="tools">
+            {move || {
+                tool_calls.get().into_iter().enumerate().map(|(i, tc)| {
+                    let name = tc.name.clone();
+                    let preview = tc.input.to_string();
+                    let ok = tc.ok;
+                    view! {
+                        <button
+                            type="button"
+                            class=move || {
+                                let active = if expanded.get().contains(&i) { " active" } else { "" };
+                                let status = if ok { "ok" } else { "err" };
+                                format!("tool-badge {status}{active}")
+                            }
+                            title=preview
+                            on:click=move |_| {
+                                set_expanded.update(|s| {
+                                    if !s.insert(i) {
+                                        s.remove(&i);
+                                    }
+                                });
+                            }
+                        >
+                            <span class="tool-name">{name}</span>
+                        </button>
+                    }
+                }).collect_view()
+            }}
+        </div>
+        <div class="tool-panels">
+            {move || {
+                tool_calls.get().into_iter().enumerate().map(|(i, tc)| {
+                    let call_sv = StoredValue::new(tc.clone());
+                    view! {
+                        <Show when=move || expanded.get().contains(&i)>
+                            <ToolCallPanel call=call_sv.get_value()/>
+                        </Show>
+                    }
+                }).collect_view()
+            }}
+        </div>
+    }
+}
+
+/// Read-only inspector for a single tool call. No truncation — the
+/// `<pre>` blocks scroll if they exceed the panel's max-height.
+#[component]
+fn ToolCallPanel(call: ToolCall) -> impl IntoView {
+    let duration_str = format_duration_ms(call.duration_ms);
+    let status_class = if call.ok { "ok" } else { "err" };
+    let status_text = if call.ok { "ok" } else { "failed" };
+    let input_pretty = serde_json::to_string_pretty(&call.input)
+        .unwrap_or_else(|_| call.input.to_string());
+    let output = call.output;
+    let output_empty = output.trim().is_empty();
+
+    view! {
+        <div class="tool-call-panel">
+            <div class="tool-panel-head">
+                <span class="tool-panel-name">{call.name}</span>
+                <span class=format!("tool-panel-status {status_class}")>{status_text}</span>
+                <span class="tool-panel-duration">{duration_str}</span>
+            </div>
+            <div class="tool-panel-section">
+                <div class="tool-panel-label">"Input"</div>
+                <pre class="tool-panel-pre">{input_pretty}</pre>
+            </div>
+            <div class="tool-panel-section">
+                <div class="tool-panel-label">"Output"</div>
+                {
+                    if output_empty {
+                        view! { <pre class="tool-panel-pre muted">"(no output)"</pre> }.into_any()
+                    } else {
+                        view! { <pre class="tool-panel-pre">{output}</pre> }.into_any()
+                    }
+                }
+            </div>
+        </div>
+    }
+}
+
+/// Sample tool-call fixture for the inspector. Only intended for
+/// manual demo / screenshot purposes; not wired into production
+/// rendering. Drops at integration with Codex's backend PR.
+#[cfg(any(test, debug_assertions))]
+#[allow(dead_code)]
+pub fn dev_fixture_tool_calls() -> Vec<ToolCall> {
+    vec![
+        ToolCall {
+            name: "aida_list".into(),
+            input: serde_json::json!({"status": "in-progress"}),
+            output: "Found 3 requirements:\n- [EPIC-16] Evolve aida-chat into first-proof-of-concept aida-consumer (Status: Approved)\n- [STORY-14] Tool-call inspector (Status: In Progress)\n- [TASK-501] Wire the killer demo (Status: Draft)".into(),
+            duration_ms: 42,
+            ok: true,
+        },
+        ToolCall {
+            name: "find_traces".into(),
+            input: serde_json::json!({"spec_id": "EPIC-16"}),
+            output: "./src/server/mcp/client.rs:1:// trace:EPIC-16 | ai:claude\n./src/server/mcp/mod.rs:1:// trace:EPIC-16 | ai:claude\n./src/server/mcp/protocol.rs:1:// trace:EPIC-16 | ai:claude\n./src/server/tools/aida.rs:1:// trace:STORY-4 EPIC-16 | ai:claude\n./src/server/tools/traces.rs:1:// trace:EPIC-16 | ai:claude".into(),
+            duration_ms: 1234,
+            ok: true,
+        },
+        ToolCall {
+            name: "read_file".into(),
+            input: serde_json::json!({"path": "nonexistent.rs"}),
+            output: "error: file not found within repo root".into(),
+            duration_ms: 8,
+            ok: false,
+        },
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,6 +1515,59 @@ mod memory_name_tests {
         let over_80: String = std::iter::once('a').chain(std::iter::repeat_n('b', 80)).collect();
         assert_eq!(over_80.len(), 81);
         assert!(!is_valid_memory_name(&over_80));
+    }
+}
+
+// trace:STORY-14 | ai:claude
+#[cfg(test)]
+mod tool_inspector_tests {
+    use super::*;
+
+    #[test]
+    fn format_duration_under_one_second() {
+        assert_eq!(format_duration_ms(0), "0 ms");
+        assert_eq!(format_duration_ms(1), "1 ms");
+        assert_eq!(format_duration_ms(42), "42 ms");
+        assert_eq!(format_duration_ms(999), "999 ms");
+    }
+
+    #[test]
+    fn format_duration_one_second_boundary() {
+        // Brief: <1000 → ms; >=1000 → "1.2 s" (one decimal).
+        assert_eq!(format_duration_ms(1000), "1.0 s");
+        assert_eq!(format_duration_ms(1500), "1.5 s");
+    }
+
+    #[test]
+    fn format_duration_long() {
+        assert_eq!(format_duration_ms(60_000), "60.0 s");
+        assert_eq!(format_duration_ms(123_456), "123.5 s");
+    }
+
+    #[test]
+    fn json_pretty_print_smoke() {
+        // The panel uses serde_json::to_string_pretty directly; this
+        // pins the expected shape so a serde_json upgrade can't silently
+        // collapse the pretty output to one line.
+        let v = serde_json::json!({"path": "src/lib.rs", "limit": 200});
+        let pretty = serde_json::to_string_pretty(&v).unwrap();
+        assert!(pretty.contains('\n'), "expected newlines in {pretty:?}");
+        assert!(pretty.contains("  "), "expected indentation in {pretty:?}");
+        assert!(pretty.contains(r#""path""#));
+        assert!(pretty.contains(r#""src/lib.rs""#));
+    }
+
+    #[test]
+    fn dev_fixture_renders_three_distinct_calls() {
+        let calls = dev_fixture_tool_calls();
+        assert_eq!(calls.len(), 3);
+        let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"aida_list"));
+        assert!(names.contains(&"find_traces"));
+        assert!(names.contains(&"read_file"));
+        // At least one should be failed (read_file in the fixture) so
+        // the panel's `failed` status branch gets exercised visually.
+        assert!(calls.iter().any(|c| !c.ok));
     }
 }
 
