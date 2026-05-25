@@ -19,11 +19,17 @@ use crate::server::config::ServerConfig;
 /// conversation.
 #[derive(Debug, Clone)]
 pub enum AgentMessage {
-    User { text: String },
+    User {
+        text: String,
+    },
     /// One full assistant turn — may contain text and/or tool_use blocks.
-    Assistant { content: Vec<AssistantBlock> },
+    Assistant {
+        content: Vec<AssistantBlock>,
+    },
     /// Tool results, sent back as a synthetic user-role turn.
-    ToolResults { results: Vec<ToolResult> },
+    ToolResults {
+        results: Vec<ToolResult>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -116,8 +122,12 @@ impl SessionStore for InMemorySessions {
 
     async fn append_user(&self, id: &str, text: &str) -> Result<(), String> {
         let mut map = self.inner.lock().await;
-        let s = map.get_mut(id).ok_or_else(|| "no such session".to_string())?;
-        s.history.push(AgentMessage::User { text: text.to_string() });
+        let s = map
+            .get_mut(id)
+            .ok_or_else(|| "no such session".to_string())?;
+        s.history.push(AgentMessage::User {
+            text: text.to_string(),
+        });
         s.transcript.push(ChatTurn {
             role: Role::User,
             text: text.to_string(),
@@ -134,7 +144,9 @@ impl SessionStore for InMemorySessions {
         transcript_turn: ChatTurn,
     ) -> Result<(), String> {
         let mut map = self.inner.lock().await;
-        let s = map.get_mut(id).ok_or_else(|| "no such session".to_string())?;
+        let s = map
+            .get_mut(id)
+            .ok_or_else(|| "no such session".to_string())?;
         s.history.extend(history_appendix);
         s.transcript.push(transcript_turn);
         s.last_active = Instant::now();

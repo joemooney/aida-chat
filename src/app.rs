@@ -10,9 +10,11 @@ use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
-use crate::messages::{ChatTurn, Role, ToolCallSummary};
 #[cfg(feature = "hydrate")]
-use crate::messages::{ChatHistory, CommentResponse, SpecResponse};
+use crate::messages::{
+    ChatHistory, CommentResponse, SpecResponse, UltraplanRequest, UltraplanResponse,
+};
+use crate::messages::{ChatTurn, Role, ToolCallSummary};
 
 // trace:STORY-21 | ai:claude
 //
@@ -141,8 +143,8 @@ fn render_markdown(src: &str) -> String {
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_FOOTNOTES);
-    let parser = Parser::new_ext(src, opts)
-        .filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_)));
+    let parser =
+        Parser::new_ext(src, opts).filter(|e| !matches!(e, Event::Html(_) | Event::InlineHtml(_)));
     let mut out = String::new();
     html::push_html(&mut out, parser);
     out
@@ -415,10 +417,13 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         // and a clearer factoring.
         Role::Assistant => {
             let body_for_comment = turn.text.clone();
-            let body_for_spec = turn.text;
+            let body_for_spec = turn.text.clone();
+            // trace:STORY-24 | ai:agy
+            let body_for_ultraplan = turn.text;
             Some(view! {
                 <CommentCapture body_text=body_for_comment session_id=session_id/>
                 <SpecCapture body_text=body_for_spec session_id=session_id/>
+                <UltraplanCapture body_text=body_for_ultraplan session_id=session_id/>
             })
         }
         Role::User => None,
@@ -616,14 +621,14 @@ fn save_comment(
 fn schedule_clear(set_badge_msg: WriteSignal<Option<String>>) {
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let cb = Closure::<dyn FnMut()>::new(move || {
         set_badge_msg.set(None);
     });
-    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-        cb.as_ref().unchecked_ref(),
-        3000,
-    );
+    let _ = window
+        .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 3000);
     cb.forget();
 }
 
@@ -827,6 +832,142 @@ fn save_spec(
     }
 }
 
+// trace:STORY-24 | ai:agy
+#[component]
+fn UltraplanCapture(body_text: String, session_id: ReadSignal<Option<String>>) -> impl IntoView {
+    let spec_id_opt = extract_first_spec_id(&body_text); // trace:STORY-24 | ai:agy
+    let initial_spec_id = spec_id_opt.unwrap_or_default(); // trace:STORY-24 | ai:agy
+    let initial_spec_id_sv = StoredValue::new(initial_spec_id);
+
+    let (is_open, set_is_open) = signal(false);
+    let (submitting, set_submitting) = signal(false);
+    let (error_msg, set_error_msg) = signal::<Option<String>>(None);
+    let (prompt, set_prompt) = signal::<Option<String>>(None);
+    let (copied, set_copied) = signal(false);
+
+    let copy_to_clipboard = move |text: String| {
+        #[cfg(not(feature = "hydrate"))]
+        {
+            let _ = text;
+            let _ = set_copied;
+        }
+        #[cfg(feature = "hydrate")]
+        {
+            if let Some(window) = web_sys::window() {
+                let clipboard = window.navigator().clipboard();
+                let _ = clipboard.write_text(&text);
+                set_copied.set(true);
+
+                use wasm_bindgen::closure::Closure;
+                use wasm_bindgen::JsCast;
+                let cb = Closure::<dyn FnMut()>::new(move || {
+                    set_copied.set(false);
+                });
+                let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    2000,
+                );
+                cb.forget();
+            }
+        }
+    };
+
+    let start_ultraplan = move |sid_val: String| {
+        let Some(sid) = session_id.get_untracked() else {
+            set_error_msg.set(Some("Session not ready yet.".into()));
+            return;
+        };
+        set_error_msg.set(None);
+        set_submitting.set(true);
+        set_is_open.set(true);
+
+        #[cfg(feature = "hydrate")]
+        {
+            leptos::task::spawn_local(async move {
+                match post_ultraplan(&sid, &sid_val).await {
+                    Ok(p) => {
+                        set_submitting.set(false);
+                        set_prompt.set(Some(p));
+                    }
+                    Err(err) => {
+                        set_submitting.set(false);
+                        set_error_msg.set(Some(err));
+                    }
+                }
+            });
+        }
+        #[cfg(not(feature = "hydrate"))]
+        {
+            let _ = (sid, sid_val);
+            set_submitting.set(false);
+        }
+    };
+
+    view! {
+        <Show when=move || !initial_spec_id_sv.get_value().is_empty()>
+            <Show when=move || !is_open.get()>
+                <div class="actions">
+                    <button
+                        class="action-btn"
+                        on:click=move |_| start_ultraplan(initial_spec_id_sv.get_value())
+                        disabled=move || session_id.get().is_none()
+                        title=format!("Assemble planning prompt for {}", initial_spec_id_sv.get_value())
+                    >
+                        {format!("Seed plan for {}", initial_spec_id_sv.get_value())}
+                    </button>
+                </div>
+            </Show>
+        </Show>
+
+        <Show when=move || is_open.get()>
+            <div class="comment-form ultraplan-container">
+                <div class="comment-row">
+                    <span class="comment-label">"Planning Prompt"</span>
+                    <Show when=move || submitting.get()>
+                        <div class="comment-error">"Generating plan seed..."</div>
+                    </Show>
+                    <Show when=move || error_msg.get().is_some()>
+                        <div class="comment-error">
+                            {move || error_msg.get().unwrap_or_default()}
+                        </div>
+                    </Show>
+                    <Show when=move || prompt.get().is_some()>
+                        {
+                            let p_text = prompt.get().unwrap();
+                            let p_text_for_copy = p_text.clone();
+                            view! {
+                                <div class="ultraplan-box">
+                                    <pre class="ultraplan-pre">
+                                        <code>{p_text}</code>
+                                    </pre>
+                                    <div class="comment-actions" style="margin-top: 8px;">
+                                        <button
+                                            class="save-btn"
+                                            on:click=move |_| copy_to_clipboard(p_text_for_copy.clone())
+                                        >
+                                            {move || if copied.get() { "Copied!" } else { "Copy Prompt" }}
+                                        </button>
+                                        <button
+                                            class="cancel-btn"
+                                            on:click=move |_| {
+                                                set_is_open.set(false);
+                                                set_prompt.set(None);
+                                                set_error_msg.set(None);
+                                            }
+                                        >
+                                            "Close"
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </Show>
+                </div>
+            </div>
+        </Show>
+    }
+}
+
 #[component]
 fn ToolBadge(call: ToolCallSummary) -> impl IntoView {
     let status = if call.ok { "ok" } else { "err" };
@@ -892,10 +1033,7 @@ mod spec_id_tests {
         // Boundary at start of string.
         assert_eq!(extract_first_spec_id("EPIC-1"), Some("EPIC-1".into()));
         // Boundary at end of string.
-        assert_eq!(
-            extract_first_spec_id("(EPIC-1)").as_deref(),
-            Some("EPIC-1")
-        );
+        assert_eq!(extract_first_spec_id("(EPIC-1)").as_deref(), Some("EPIC-1"));
         // Adjacent punctuation OK.
         assert_eq!(
             extract_first_spec_id("Reference: STORY-42, please."),
@@ -911,7 +1049,9 @@ mod spec_id_tests {
 
     #[test]
     fn is_valid_spec_id_accepts_known_prefixes() {
-        for s in ["EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2"] {
+        for s in [
+            "EPIC-1", "STORY-42", "TASK-7", "BUG-103", "FR-0042", "ADR-9", "SPIKE-2",
+        ] {
             assert!(is_valid_spec_id(s), "{s:?} should be valid");
         }
     }
@@ -1085,8 +1225,8 @@ async fn fetch_history(session_id: &str) -> Result<ChatHistory, String> {
     let opts = RequestInit::new();
     opts.set_method("GET");
     let url = format!("/api/sessions/{session_id}/history");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1136,8 +1276,8 @@ async fn post_comment(session_id: &str, spec_id: &str, text: &str) -> Result<Str
     opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
 
     let url = format!("/api/sessions/{session_id}/comment");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1200,8 +1340,8 @@ async fn post_spec(
     opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
 
     let url = format!("/api/sessions/{session_id}/spec");
-    let req = Request::new_with_str_and_init(&url, &opts)
-        .map_err(|e| format!("request init: {e:?}"))?;
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
     let window = web_sys::window().ok_or("no window")?;
     let resp_value = JsFuture::from(window.fetch_with_request(&req))
         .await
@@ -1225,6 +1365,55 @@ async fn post_spec(
     }
     if (200..300).contains(&status) {
         Ok((String::new(), body_text))
+    } else {
+        Err(format!("HTTP {status}: {}", body_text.trim()))
+    }
+}
+
+// trace:STORY-24 | ai:agy
+#[cfg(feature = "hydrate")]
+async fn post_ultraplan(session_id: &str, spec_id: &str) -> Result<String, String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{Headers, Request, RequestInit, Response};
+
+    let body = serde_json::to_string(&UltraplanRequest {
+        spec_id: spec_id.to_string(),
+    })
+    .map_err(|e| format!("encode: {e}"))?;
+    let headers = Headers::new().map_err(|e| format!("headers: {e:?}"))?;
+    headers
+        .set("content-type", "application/json")
+        .map_err(|e| format!("set header: {e:?}"))?;
+
+    let opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_headers(&headers);
+    opts.set_body(&wasm_bindgen::JsValue::from_str(&body));
+
+    let url = format!("/api/sessions/{session_id}/ultraplan");
+    let req =
+        Request::new_with_str_and_init(&url, &opts).map_err(|e| format!("request init: {e:?}"))?;
+    let window = web_sys::window().ok_or("no window")?;
+    let resp_value = JsFuture::from(window.fetch_with_request(&req))
+        .await
+        .map_err(|e| format!("fetch: {e:?}"))?;
+    let resp: Response = resp_value.dyn_into().map_err(|_| "not a response")?;
+    let status = resp.status();
+    let text_promise = resp.text().map_err(|e| format!("text: {e:?}"))?;
+    let body_text = JsFuture::from(text_promise)
+        .await
+        .map_err(|e| format!("text await: {e:?}"))?
+        .as_string()
+        .unwrap_or_default();
+    if let Ok(parsed) = serde_json::from_str::<UltraplanResponse>(&body_text) {
+        if parsed.ok {
+            return Ok(parsed.prompt.unwrap_or_default());
+        }
+        return Err(parsed.error.unwrap_or_else(|| format!("HTTP {status}")));
+    }
+    if (200..300).contains(&status) {
+        Ok(body_text)
     } else {
         Err(format!("HTTP {status}: {}", body_text.trim()))
     }
@@ -1325,7 +1514,10 @@ fn stream_chat(
             if let Some(es) = es_holder.borrow_mut().take() {
                 es.close();
             }
-            let msg = ev.data().as_string().unwrap_or_else(|| "stream error".into());
+            let msg = ev
+                .data()
+                .as_string()
+                .unwrap_or_else(|| "stream error".into());
             on_error(msg);
         });
         es.add_event_listener_with_callback("err", cb.as_ref().unchecked_ref())
