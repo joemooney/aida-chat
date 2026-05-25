@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T15:39:32.464806097Z
-modified_at: 2026-05-25T07:31:06.690746536Z
+modified_at: 2026-05-25T07:32:03.422823639Z
 req_type: Story
 tags:
 - batch:aida-chat-feedback-loops
@@ -19,3 +19,8 @@ comments:
   content: 'Codex implementation complete in branch codex/story-25-trace-drift: added verify_trace_drift tool, /api/sessions/:id/verify-drift endpoint, shared response types, assistant-message UI affordance, and comment-close loop. Verified 43 ssr lib tests, hydrate build, cargo leptos build, and live STORY-3 HTTP smoke with 7 findings/no truncation.'
   created_at: 2026-05-25T07:31:06.690746536Z
   modified_at: 2026-05-25T07:31:06.690746536Z
+- id: 019e5e0c-46de-7b32-8a44-6d6848048624
+  author: joe
+  content: 'PR opened: https://github.com/joemooney/aida-chat/pull/17 (branch codex/story-25-trace-drift, commit dc2012f).'
+  created_at: 2026-05-25T07:32:03.422823639Z
+  modified_at: 2026-05-25T07:32:03.422823639Z
