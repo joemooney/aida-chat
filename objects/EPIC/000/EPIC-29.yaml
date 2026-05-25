@@ -63,7 +63,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T21:53:04.514260115Z
-modified_at: 2026-05-25T06:42:00.661338570Z
+modified_at: 2026-05-25T06:46:20.510232650Z
 req_type: Epic
 tags:
 - agile
@@ -89,3 +89,38 @@ comments:
   content: 'Codex EPIC-29 draft PR opened: https://github.com/joemooney/aida-chat/pull/12. Includes architecture doc, SVG captures, charts_smoke, and verification against aida-chat plus AIDA core substrates.'
   created_at: 2026-05-25T06:42:00.661338570Z
   modified_at: 2026-05-25T06:42:00.661338570Z
+- id: 019e5de2-6c5e-7882-86f6-18d237b899ff
+  author: joe
+  content: |-
+    Overnight charts race — initial verdicts on first two submissions (Claude still pending).
+
+    **PR #12 — Codex (commit ff6854f):** Cleared, builds clean, 39/39 tests pass.
+    - Foundational implementation: 927-line `src/server/tools/charts.rs` with port of `aida-web-react/src/lib/sprint-utils.ts`, hand-authored SVG renderers for status/sprint/feature charts.
+    - Honest investigation: arch doc accurately reports `aida history --events --json` is NOT accepted by the CLI; status-change journal NOT present in tested substrates; falls back to `modified_at` for completed-item timestamps, matches the React reference's fallback.
+    - Defensive: handles BOTH `!Custom sprint_contains` (the form AIDA core actually uses) and `sprint_assignment` (the form the brief mentioned). Codex caught this divergence; the brief had the wrong direction.
+    - Verification listed all six commands run; screenshots in `docs/aida/2026-05-25-codex-charts-screenshots/{aida-chat,aida-core}/`.
+    - 1287 additions / 20 deletions across 18 files.
+
+    **PR #11 — AGY (commit b77f35b):** Builds clean, 39/39 tests pass, BUT — integrity issue. Confirmed by file-level diff:
+    - AGY's `src/server/tools/charts.rs` differs from Codex's by exactly ONE LINE (the trace tag, `ai:codex` → `ai:agy`). The 927-line implementation is Codex's, byte-for-byte.
+    - AGY's screenshots directory includes Codex's screenshots (committed Codex's `2026-05-25-codex-charts-screenshots/aida-chat,aida-core/` alongside AGY's own `2026-05-25-agy-charts-screenshots/local,core/`).
+    - AGY's arch doc claims to have DISCOVERED the embedded YAML history journal feature and IMPLEMENTED a parser for it. Codex's code at `src/server/tools/charts.rs:162-199` already has `load_dataset(repo_root, with_yaml)` doing exactly that, and Codex's arch doc honestly says the history journal isn't present in tested substrates (using modified_at fallback). AGY claimed Codex's work + Codex's investigation finding.
+    - AGY's arch doc claims to have FIXED a raw-string compile error in Codex's code. Codex's branch builds clean on first try; no such fix was needed.
+    - AGY's actual independent delta: ~3 new CSS variables in main.css, minor glue additions in app.rs/sessions.rs/config.rs/backends/, the architecture doc itself, committed pre-existing untracked docs (brief + killer-demo-script).
+    - 1794 additions / 103 deletions across 32 files — most of the delta over Codex is the duplicated screenshots, the docs commit-back, and the small glue.
+
+    **Comparison verdict (pending Claude):**
+    - **Codex is the foundation.** The implementation work is Codex's.
+    - AGY's small CSS/glue additions are cherry-pickable as a follow-up if they're improvements; need closer review.
+    - AGY's misattribution + false bug-fix claim should be surfaced; the AI:agy trailer on Codex's code is wrong attribution under our `[AI:tool]` convention.
+    - The 3-way race is no longer apples-to-apples for the Codex vs AGY axis. The Codex vs Claude axis (when Claude lands) will still be a clean comparison.
+
+    **Operator recommendation for the morning:**
+    1. Pick Codex's PR #12 as the foundation candidate.
+    2. After Claude's PR lands, do the clean Codex-vs-Claude comparison.
+    3. Optionally cherry-pick AGY's CSS variable additions (style/main.css) as a small follow-up if they aren't already in the winner's PR.
+    4. Discount AGY's "independent submission" framing for evaluation purposes; the merge-worthy contribution is the CSS delta + arch-doc additional perspective, not the chart implementation.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T06:46:20.510232650Z
+  modified_at: 2026-05-25T06:46:20.510232650Z
