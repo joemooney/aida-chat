@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-25T01:58:15.677783107Z
+modified_at: 2026-05-25T01:59:53.445031760Z
 req_type: Epic
 tags:
 - first-consumer
@@ -194,3 +194,8 @@ comments:
   content: 'Codex cleanup note: removed the BUG-377 CLI-only bypasses for aida_comment_add and aida_add after upstream AIDA PR-308 fixed MCP write persistence. Both executors are MCP-first again with CLI fallback on unavailable transport. Verified with current AIDA binary /home/joe/ai/aida/target/debug/aida: cargo test --features ssr --lib passed 36/36; cargo run --example mcp_smoke --features ssr passed and cleaned up both MCP write smoke artifacts; HTTP smoke verified /api/sessions/:id/comment and /api/sessions/:id/spec persisted through MCP and cleanup succeeded.'
   created_at: 2026-05-25T01:58:15.677783107Z
   modified_at: 2026-05-25T01:58:15.677783107Z
+- id: 019e5cdc-2b65-7b22-a84a-0e9d9607435c
+  author: joe
+  content: 'Opened cleanup PR #8 for BUG-377 bypass removal: aida_comment_add and aida_add are MCP-first again with CLI fallback; verification used upstream-fixed aida binary and passed cargo test, mcp_smoke, and HTTP smoke.'
+  created_at: 2026-05-25T01:59:53.445031760Z
+  modified_at: 2026-05-25T01:59:53.445031760Z
