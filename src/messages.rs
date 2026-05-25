@@ -140,6 +140,35 @@ pub struct MemoryResponse {
     pub error: Option<String>,
 }
 
+/// `POST /api/sessions/:id/verify-drift` request body (STORY-25).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyDriftRequest {
+    pub spec_id: String,
+}
+
+/// Per-trace-site drift classifier finding (STORY-25).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TraceFinding {
+    pub path: String,
+    pub line: u64,
+    pub aligned: bool,
+    pub severity: String,
+    pub reason: String,
+}
+
+/// `POST /api/sessions/:id/verify-drift` response body (STORY-25).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyDriftResponse {
+    pub ok: bool,
+    #[serde(default)]
+    pub findings: Vec<TraceFinding>,
+    pub truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub error: Option<String>,
+}
+
 #[cfg(test)]
 mod spec_contract_tests {
     // trace:STORY-22 | ai:claude
@@ -351,5 +380,44 @@ mod memory_contract_tests {
         assert!(back.ok);
         assert_eq!(back.path.as_deref(), Some("/tmp/foo.md"));
         assert!(back.message.is_none());
+    }
+}
+
+#[cfg(test)]
+mod verify_drift_tests {
+    // trace:STORY-25 | ai:codex
+    use super::*;
+
+    #[test]
+    fn verify_drift_response_roundtrip_with_findings() {
+        let response = VerifyDriftResponse {
+            ok: true,
+            findings: vec![
+                TraceFinding {
+                    path: "src/server/agent.rs".into(),
+                    line: 12,
+                    aligned: true,
+                    severity: "ok".into(),
+                    reason: "still matches".into(),
+                },
+                TraceFinding {
+                    path: "src/server/api.rs".into(),
+                    line: 34,
+                    aligned: false,
+                    severity: "minor".into(),
+                    reason: "endpoint shape drifted".into(),
+                },
+            ],
+            truncated: true,
+            message: Some("Checked first 10 trace sites".into()),
+            error: None,
+        };
+        let s = serde_json::to_string(&response).unwrap();
+        let back: VerifyDriftResponse = serde_json::from_str(&s).unwrap();
+        assert!(back.ok);
+        assert!(back.truncated);
+        assert_eq!(back.findings.len(), 2);
+        assert_eq!(back.findings[1].severity, "minor");
+        assert!(back.error.is_none());
     }
 }

@@ -358,6 +358,7 @@ Guidelines:
   - When the user clearly asks to save a substantive discussion summary, design note, or decision to a SPEC, use aida_comment_add sparingly.
   - When the user clearly asks to file work or a defect as a new SPEC, use aida_add sparingly.
   - When the user clearly asks to save a pattern, principle, or correction as memory, use write_memory sparingly.
+  - When the user asks whether trace comments still match a SPEC, use verify_trace_drift for one SPEC-ID at a time.
   - When the user asks about code or documentation contents, use grep_repo to locate things, then read_file to inspect specific files.
   - When the user asks for a visualization of project state — 'show me', 'what's the status breakdown', 'sprint burndown', 'velocity trend', 'feature progress' — call chart_status / chart_sprint / chart_feature. They render inline below your reply. Don't paste the SVG into your text; the chart tool already pushed it to the chat surface. Just narrate what the chart shows.
   - Be concise. Don't paste large file contents back to the user unless they ask.
