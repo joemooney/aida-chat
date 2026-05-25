@@ -4,17 +4,18 @@
 // Messages API. See backends/claude_cli.rs for the alternative.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
-use crate::messages::{ChatTurn, Role, ToolCallSummary};
+use crate::messages::{ChatTurn, Role, ToolCall};
 use crate::server::agent::AgentEvent;
 use crate::server::config::ServerConfig;
 use crate::server::sessions::{AgentMessage, AssistantBlock, SessionStore, ToolResult};
-use crate::server::tools::{self, all_tool_specs, preview_input};
+use crate::server::tools::{self, all_tool_specs};
 
 const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -33,14 +34,16 @@ pub async fn run_turn(
     let session = match sessions.get(&session_id).await {
         Some(s) => s,
         None => {
-            let _ = tx.send(AgentEvent::Error("session disappeared".into())).await;
+            let _ = tx
+                .send(AgentEvent::Error("session disappeared".into()))
+                .await;
             return;
         }
     };
 
     let mut working: Vec<AgentMessage> = session.history.clone();
     let mut new_entries: Vec<AgentMessage> = vec![]; // suffix appended this turn
-    let mut tool_summaries: Vec<ToolCallSummary> = vec![];
+    let mut tool_calls: Vec<ToolCall> = vec![];
     let mut final_text = String::new();
 
     let client = reqwest::Client::builder()
@@ -56,14 +59,7 @@ pub async fn run_turn(
     for iteration in 0..cfg.max_tool_iterations {
         let body = build_request_body(&cfg, &working);
         let stream_text_tx = tx.clone();
-        let round = match anthropic_round(
-            &client,
-            api_key,
-            body,
-            stream_text_tx,
-        )
-        .await
-        {
+        let round = match anthropic_round(&client, api_key, body, stream_text_tx).await {
             Ok(r) => r,
             Err(e) => {
                 let _ = tx.send(AgentEvent::Error(e)).await;
@@ -78,7 +74,9 @@ pub async fn run_turn(
         working.push(AgentMessage::Assistant {
             content: blocks.clone(),
         });
-        new_entries.push(AgentMessage::Assistant { content: blocks.clone() });
+        new_entries.push(AgentMessage::Assistant {
+            content: blocks.clone(),
+        });
 
         // Track text for the final visible transcript turn. Each round
         // overwrites; the *last* round's text is what the user sees.
@@ -102,21 +100,17 @@ pub async fn run_turn(
                 }
                 let mut results = vec![];
                 for (id, name, input) in tool_uses {
-                    let preview = preview_input(&input);
+                    let started = Instant::now();
                     let (output, ok) = match tools::dispatch(&cfg, &name, &input).await {
                         Ok(s) => (s, true),
                         Err(e) => (format!("error: {e}"), false),
                     };
-                    let summary = ToolCallSummary {
-                        name: name.clone(),
-                        input_preview: preview,
-                        ok,
-                    };
-                    tool_summaries.push(summary.clone());
-                    let _ = tx.send(AgentEvent::ToolCall(summary)).await;
+                    let call = completed_tool_call(name.clone(), input, output, ok, started);
+                    tool_calls.push(call.clone());
+                    let _ = tx.send(AgentEvent::ToolCall(call.clone())).await;
                     results.push(ToolResult {
                         tool_use_id: id,
-                        content: output,
+                        content: call.output,
                         is_error: !ok,
                     });
                 }
@@ -126,9 +120,7 @@ pub async fn run_turn(
                 new_entries.push(AgentMessage::ToolResults { results });
             }
             Some("max_tokens") => {
-                final_text.push_str(
-                    "\n\n[truncated: max_tokens reached]",
-                );
+                final_text.push_str("\n\n[truncated: max_tokens reached]");
                 break;
             }
             other => {
@@ -155,7 +147,7 @@ pub async fn run_turn(
     let transcript_turn = ChatTurn {
         role: Role::Assistant,
         text: final_text,
-        tool_calls: tool_summaries,
+        tool_calls,
     };
     if let Err(e) = sessions
         .commit_assistant_turn(&session_id, new_entries, transcript_turn)
@@ -165,6 +157,22 @@ pub async fn run_turn(
         return;
     }
     let _ = tx.send(AgentEvent::Done).await;
+}
+
+fn completed_tool_call(
+    name: String,
+    input: Value,
+    output: String,
+    ok: bool,
+    started: Instant,
+) -> ToolCall {
+    ToolCall {
+        name,
+        input,
+        output,
+        duration_ms: started.elapsed().as_millis().max(1) as u64,
+        ok,
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -384,17 +392,16 @@ async fn handle_event(
     };
     match event_name {
         "content_block_start" => {
-            let index = data
-                .get("index")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+            let index = data.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
             let block_type = data
                 .get("content_block")
                 .and_then(|b| b.get("type"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             let block = match block_type {
-                "text" => PartialBlock::Text { text: String::new() },
+                "text" => PartialBlock::Text {
+                    text: String::new(),
+                },
                 "tool_use" => {
                     let id = data
                         .get("content_block")
@@ -414,16 +421,15 @@ async fn handle_event(
                         input_json: String::new(),
                     }
                 }
-                _ => PartialBlock::Text { text: String::new() },
+                _ => PartialBlock::Text {
+                    text: String::new(),
+                },
             };
             ensure_index(&mut state.blocks, index);
             state.blocks[index] = block;
         }
         "content_block_delta" => {
-            let index = data
-                .get("index")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as usize;
+            let index = data.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
             let delta = data.get("delta").cloned().unwrap_or(Value::Null);
             let delta_type = delta.get("type").and_then(|v| v.as_str()).unwrap_or("");
             if index >= state.blocks.len() {
@@ -472,7 +478,9 @@ async fn handle_event(
 
 fn ensure_index(blocks: &mut Vec<PartialBlock>, index: usize) {
     while blocks.len() <= index {
-        blocks.push(PartialBlock::Text { text: String::new() });
+        blocks.push(PartialBlock::Text {
+            text: String::new(),
+        });
     }
 }
 
@@ -544,5 +552,27 @@ impl SseParser {
 
     fn next_event(&mut self) -> Option<SseEvent> {
         self.ready.pop_front()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn completed_tool_call_captures_full_input_output_and_timing() {
+        let call = completed_tool_call(
+            "find_traces".into(),
+            json!({"spec_id": "STORY-14"}),
+            "found traces".into(),
+            true,
+            Instant::now(),
+        );
+
+        assert_eq!(call.name, "find_traces");
+        assert_eq!(call.input["spec_id"], "STORY-14");
+        assert_eq!(call.output, "found traces");
+        assert!(call.duration_ms > 0);
+        assert!(call.ok);
     }
 }

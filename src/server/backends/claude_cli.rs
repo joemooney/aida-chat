@@ -37,12 +37,11 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 
-use crate::messages::{ChatTurn, Role, ToolCallSummary};
+use crate::messages::{ChatTurn, Role, ToolCall};
 use crate::server::agent::AgentEvent;
 use crate::server::config::ServerConfig;
 use crate::server::sessions::SessionStore;
 
-const TOOL_PREVIEW_CAP: usize = 120;
 const TURN_REQUEST_BUFFER: usize = 8;
 
 // --------------------------------------------------------------------------
@@ -97,14 +96,19 @@ pub async fn run_turn(
         Err(_) => {
             registry().forget(&session_id).await;
             let _ = tx
-                .send(AgentEvent::Error("claude live process died mid-turn".into()))
+                .send(AgentEvent::Error(
+                    "claude live process died mid-turn".into(),
+                ))
                 .await;
             return;
         }
     };
 
     match outcome {
-        TurnOutcome::Ok { final_text, tool_calls } => {
+        TurnOutcome::Ok {
+            final_text,
+            tool_calls,
+        } => {
             let transcript_turn = ChatTurn {
                 role: Role::Assistant,
                 text: final_text,
@@ -194,9 +198,7 @@ impl LiveProcessRegistry {
     async fn evict_idle(&self, ttl: std::time::Duration) {
         let now = Instant::now();
         let mut map = self.inner.lock().await;
-        map.retain(|_, h| {
-            !h.request_tx.is_closed() && now.duration_since(h.last_used) < ttl
-        });
+        map.retain(|_, h| !h.request_tx.is_closed() && now.duration_since(h.last_used) < ttl);
         // The dropped handles close their channels, which terminates
         // the matching actor tasks, which kill the child processes.
     }
@@ -230,7 +232,7 @@ struct TurnRequest {
 enum TurnOutcome {
     Ok {
         final_text: String,
-        tool_calls: Vec<ToolCallSummary>,
+        tool_calls: Vec<ToolCall>,
     },
     Err(String),
 }
@@ -258,9 +260,9 @@ fn spawn_actor(
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| {
-        format!("spawn `claude`: {e}. Is Claude Code installed and on PATH?")
-    })?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("spawn `claude`: {e}. Is Claude Code installed and on PATH?"))?;
     let stdin = child.stdin.take().expect("stdin piped");
     let stdout = child.stdout.take().expect("stdout piped");
     let stderr = child.stderr.take().expect("stderr piped");
@@ -289,7 +291,9 @@ fn spawn_actor(
         });
     }
 
-    tokio::spawn(actor(child, stdin, stdout, stderr_buf, requests, session_id));
+    tokio::spawn(actor(
+        child, stdin, stdout, stderr_buf, requests, session_id,
+    ));
     Ok(())
 }
 
@@ -423,9 +427,7 @@ async fn wait_for_ready<R: AsyncBufReadExt + Unpin>(
                 }
                 // Anything else: keep scanning.
             }
-            Ok(None) => {
-                return Some("claude stdout closed before init".to_string())
-            }
+            Ok(None) => return Some("claude stdout closed before init".to_string()),
             Err(e) => return Some(format!("read stdout: {e}")),
         }
     }
@@ -437,16 +439,13 @@ async fn wait_for_ready<R: AsyncBufReadExt + Unpin>(
 
 #[derive(Default)]
 struct StreamState {
-    tool_calls: Vec<ToolCallSummary>,
+    tool_calls: Vec<ToolCall>,
     tool_index_by_id: HashMap<String, usize>,
+    tool_started_by_id: HashMap<String, Instant>,
     final_outcome: Option<Result<String, String>>,
 }
 
-async fn handle_line(
-    line: &str,
-    state: &mut StreamState,
-    tx: &mpsc::Sender<AgentEvent>,
-) {
+async fn handle_line(line: &str, state: &mut StreamState, tx: &mpsc::Sender<AgentEvent>) {
     let line = line.trim();
     if line.is_empty() {
         return;
@@ -493,18 +492,19 @@ async fn handle_line(
                         .unwrap_or_default()
                         .to_string();
                     let input = block.get("input").cloned().unwrap_or(Value::Null);
-                    let preview = preview_of(&input);
-                    let summary = ToolCallSummary {
+                    let call = ToolCall {
                         name,
-                        input_preview: preview,
+                        input,
+                        output: String::new(),
+                        duration_ms: 0,
                         ok: true,
                     };
                     let idx = state.tool_calls.len();
-                    state.tool_calls.push(summary.clone());
+                    state.tool_calls.push(call);
                     if !id.is_empty() {
-                        state.tool_index_by_id.insert(id, idx);
+                        state.tool_index_by_id.insert(id.clone(), idx);
+                        state.tool_started_by_id.insert(id, Instant::now());
                     }
-                    let _ = tx.send(AgentEvent::ToolCall(summary)).await;
                 }
             }
         }
@@ -527,12 +527,16 @@ async fn handle_line(
                         .get("tool_use_id")
                         .and_then(|x| x.as_str())
                         .unwrap_or_default();
-                    if is_error {
-                        if let Some(idx) = state.tool_index_by_id.get(tool_use_id).copied() {
-                            if let Some(s) = state.tool_calls.get_mut(idx) {
-                                s.ok = false;
-                                let _ = tx.send(AgentEvent::ToolCall(s.clone())).await;
-                            }
+                    if let Some(idx) = state.tool_index_by_id.get(tool_use_id).copied() {
+                        if let Some(s) = state.tool_calls.get_mut(idx) {
+                            s.ok = !is_error;
+                            s.output = tool_result_output(block);
+                            s.duration_ms = state
+                                .tool_started_by_id
+                                .remove(tool_use_id)
+                                .map(|started| started.elapsed().as_millis().max(1) as u64)
+                                .unwrap_or(1);
+                            let _ = tx.send(AgentEvent::ToolCall(s.clone())).await;
                         }
                     }
                 }
@@ -561,14 +565,65 @@ async fn handle_line(
     }
 }
 
-fn preview_of(input: &Value) -> String {
-    if input.is_null() {
+fn tool_result_output(block: &Value) -> String {
+    let Some(content) = block.get("content") else {
         return String::new();
+    };
+    match content {
+        Value::String(s) => s.clone(),
+        Value::Array(items) => items
+            .iter()
+            .filter_map(|item| item.get("text").and_then(|x| x.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Value::Null => String::new(),
+        other => other.to_string(),
     }
-    let s = input.to_string();
-    if s.len() <= TOOL_PREVIEW_CAP {
-        s
-    } else {
-        format!("{}…", &s[..TOOL_PREVIEW_CAP])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stream_parser_emits_completed_tool_call_with_output_and_duration() {
+        let (tx, mut rx) = mpsc::channel(4);
+        let mut state = StreamState::default();
+
+        handle_line(
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"find_traces","input":{"spec_id":"STORY-14"}}]}}"#,
+            &mut state,
+            &tx,
+        )
+        .await;
+        assert!(rx.try_recv().is_err(), "tool event should wait for result");
+
+        handle_line(
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"full output","is_error":false}]}}"#,
+            &mut state,
+            &tx,
+        )
+        .await;
+
+        let AgentEvent::ToolCall(call) = rx.recv().await.unwrap() else {
+            panic!("expected tool event");
+        };
+        assert_eq!(call.name, "find_traces");
+        assert_eq!(call.input["spec_id"], "STORY-14");
+        assert_eq!(call.output, "full output");
+        assert!(call.duration_ms > 0);
+        assert!(call.ok);
+    }
+
+    #[test]
+    fn tool_result_output_reads_text_blocks() {
+        let block = json!({
+            "content": [
+                {"type": "text", "text": "first"},
+                {"type": "text", "text": "second"}
+            ]
+        });
+
+        assert_eq!(tool_result_output(&block), "first\nsecond");
     }
 }
