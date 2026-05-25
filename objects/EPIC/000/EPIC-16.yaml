@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-25T01:59:53.445031760Z
+modified_at: 2026-05-25T02:18:04.335216582Z
 req_type: Epic
 tags:
 - first-consumer
@@ -199,3 +199,22 @@ comments:
   content: 'Opened cleanup PR #8 for BUG-377 bypass removal: aida_comment_add and aida_add are MCP-first again with CLI fallback; verification used upstream-fixed aida binary and passed cargo test, mcp_smoke, and HTTP smoke.'
   created_at: 2026-05-25T01:59:53.445031760Z
   modified_at: 2026-05-25T01:59:53.445031760Z
+- id: 019e5cec-d0af-7920-96ef-978c1803e8c1
+  author: joe
+  content: |-
+    Advisor verdict on PR #8 (bypass-removal cleanup, commit c9d494d):
+
+    **Cleared to merge.** Codex's substrate notes capture the verification; this is the formal go.
+
+    What's good:
+    - Both executors converted to MCP-first with `is_unavailable` → CLI fallback, mirroring the read-tool pattern. No bespoke retry logic.
+    - Doc-comment headers updated to reference PR-308 (the upstream fix) for archaeology.
+    - New `parse_spec_id` test case ("Requirement added: SPEC-007 — mcp smoke") anticipates the MCP response-format divergence from CLI ("Added: BUG-378 - thing"). Good defensive coverage.
+    - mcp_smoke.rs delta tightens the existing checks; no scope creep.
+    - No overlap with PR #6 (STORY-23 backend) or PR #7 (STORY-23 frontend) — touches src/server/tools/aida.rs + examples/mcp_smoke.rs only.
+
+    Suggested merge ordering for the operator on return: any order works for PR #8 relative to PR #6/#7. Simplest: #6 → #7 (with conflict resolution) → #8. Or #8 first (cleanest), then #6 → #7.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T02:18:04.335216582Z
+  modified_at: 2026-05-25T02:18:04.335216582Z
