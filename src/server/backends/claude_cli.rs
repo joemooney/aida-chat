@@ -113,6 +113,10 @@ pub async fn run_turn(
                 role: Role::Assistant,
                 text: final_text,
                 tool_calls,
+                // trace:EPIC-29 | ai:claude — claude-cli backend doesn't
+                // expose our chart_* tools (those run via our own MCP/tool
+                // surface, not Claude Code's). Always empty here.
+                chart_artifacts: vec![],
             };
             if let Err(e) = sessions
                 .commit_assistant_turn(&session_id, vec![], transcript_turn)

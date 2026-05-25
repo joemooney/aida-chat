@@ -273,6 +273,11 @@ fn event_to_sse(ev: AgentEvent) -> Result<Event, Infallible> {
             let json = serde_json::to_string(&tc).unwrap_or_else(|_| "{}".into());
             Event::default().event("tool").data(json)
         }
+        // trace:EPIC-29 | ai:claude — SVG chart pushed out-of-band.
+        AgentEvent::ChartArtifact(art) => {
+            let json = serde_json::to_string(&art).unwrap_or_else(|_| "{}".into());
+            Event::default().event("chart").data(json)
+        }
         AgentEvent::Done => Event::default().event("done").data("ok"),
         AgentEvent::Error(msg) => Event::default().event("err").data(msg),
     };
@@ -290,6 +295,7 @@ fn synthesize_empty_history(id: String) -> ChatHistory {
             role: Role::Assistant,
             text: "Hi! Ask about this repo or its requirements.".into(),
             tool_calls: vec![],
+            chart_artifacts: vec![],
         }],
     }
 }

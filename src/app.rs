@@ -12,7 +12,7 @@ use leptos_router::path;
 
 #[cfg(feature = "hydrate")]
 use crate::messages::{ChatHistory, CommentResponse, MemoryResponse, SpecResponse};
-use crate::messages::{ChatTurn, Role, ToolCall};
+use crate::messages::{ChartArtifact, ChatTurn, Role, ToolCall};
 
 // trace:STORY-21 | ai:claude
 //
@@ -189,6 +189,8 @@ fn ChatPage() -> impl IntoView {
     let (streaming, set_streaming) = signal(false);
     let (live_text, set_live_text) = signal(String::new());
     let (live_tools, set_live_tools) = signal::<Vec<ToolCall>>(vec![]);
+    // trace:EPIC-29 | ai:claude — chart artifacts streamed during this turn.
+    let (live_charts, set_live_charts) = signal::<Vec<ChartArtifact>>(vec![]);
     let (error, set_error) = signal::<Option<String>>(None);
     let (session_id, set_session_id) = signal::<Option<String>>(None);
     #[allow(unused_variables)] // set_backend is only used in the hydrate build
@@ -239,6 +241,7 @@ fn ChatPage() -> impl IntoView {
         set_turns.set(vec![]);
         set_live_text.set(String::new());
         set_live_tools.set(vec![]);
+        set_live_charts.set(vec![]);
         set_error.set(None);
         set_session_id.set(None);
         #[cfg(feature = "hydrate")]
@@ -274,11 +277,13 @@ fn ChatPage() -> impl IntoView {
                 role: Role::User,
                 text: text.clone(),
                 tool_calls: vec![],
+                chart_artifacts: vec![],
             })
         });
         set_streaming.set(true);
         set_live_text.set(String::new());
         set_live_tools.set(vec![]);
+        set_live_charts.set(vec![]);
 
         #[cfg(feature = "hydrate")]
         {
@@ -287,16 +292,19 @@ fn ChatPage() -> impl IntoView {
                 text,
                 set_live_text,
                 set_live_tools,
-                move |final_text, tool_calls| {
+                set_live_charts,
+                move |final_text, tool_calls, chart_artifacts| {
                     set_turns.update(|t| {
                         t.push(ChatTurn {
                             role: Role::Assistant,
                             text: final_text,
                             tool_calls,
+                            chart_artifacts,
                         })
                     });
                     set_live_text.set(String::new());
                     set_live_tools.set(vec![]);
+                    set_live_charts.set(vec![]);
                     set_streaming.set(false);
                 },
                 move |err| {
@@ -336,6 +344,15 @@ fn ChatPage() -> impl IntoView {
                         <ToolStrip tool_calls=live_tools.into()/>
                         <div class="text markdown" inner_html=move || render_markdown(&live_text.get())/>
                         <span class="cursor">"▌"</span>
+                        // trace:EPIC-29 | ai:claude — live chart artifacts.
+                        <div class="chart-gallery">
+                            {move || {
+                                live_charts.get()
+                                    .into_iter()
+                                    .map(|art| view! { <ChartArtifactView art=art/> })
+                                    .collect_view()
+                            }}
+                        </div>
                     </div>
                 </Show>
                 <Show when=move || error.get().is_some()>
@@ -420,11 +437,24 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
         }
         Role::User => None,
     };
+    // trace:EPIC-29 | ai:claude — render any chart artifacts emitted
+    // during the turn (persisted on ChatTurn, replays on /history).
+    let chart_view = if !turn.chart_artifacts.is_empty() {
+        let artifacts = turn.chart_artifacts.clone();
+        Some(view! {
+            <div class="chart-gallery">
+                {artifacts.into_iter().map(|art| view! { <ChartArtifactView art=art/> }).collect_view()}
+            </div>
+        })
+    } else {
+        None
+    };
     view! {
         <div class=format!("turn {role_class}")>
             <div class="role">{role_label}</div>
             {tools_view}
             {body}
+            {chart_view}
             {capture_view}
         </div>
     }
@@ -434,48 +464,27 @@ fn TurnView(turn: ChatTurn, session_id: ReadSignal<Option<String>>) -> impl Into
 // trace:STORY-21 STORY-22 STORY-23 | ai:claude
 //
 // Three parallel capture components: CommentCapture, SpecCapture,
-// MemoryCapture. They share a pattern (trigger button → inline form →
-// POST → success badge or inline error) but each has a domain-specific
-// field set, validator, badge formatter, and HTTP wire shape.
-//
-// FACTORING DECISION (STORY-23): keep them parallel.
-//
-// What's shared:
-//   * `<Show>` scaffold (is_open / badge / form gates)
-//   * StoredValue trick for re-prime on open
-//   * Save handler factored to dodge `Fn`/`FnOnce` mismatch in closures
-//   * Schedule_clear / 3s badge fade
-//
-// What differs:
-//   * Field count (2 / 3 / 4) and widget kind (input vs select vs
-//     textarea); each field has its own validator (SPEC-ID regex, slug
-//     regex, type enum, length caps)
-//   * Pre-fill heuristics (first-cited SPEC-ID, first-sentence title,
-//     empty slug)
-//   * Success badge wording ("Comment added to X" / "Created Y" /
-//     "Memory saved: Z")
-//   * Request/response types (CommentRequest/Response,
-//     SpecRequest/Response, MemoryRequest/Response)
-//   * Endpoint URL
-//
-// A generic `CaptureForm<FieldConfig>` would compress the outer
-// scaffold but force the field set to be type-erased
-// (`Vec<DynField>`, runtime field-name lookup) or impose heavy
-// const-generics. Either path loses the "field is a named signal"
-// affordance these components currently have, where typos are caught
-// at compile time and each save handler reads named fields directly.
-//
-// The three POST helpers are more amenable to factoring (only URL +
-// types vary) — a generic `post_typed::<Req, Resp>(url, body)` would
-// shrink ~60 LOC. Skipped here so the STORY-23 PR stays focused; flag
-// as a small follow-on if STORY-24 lands a fourth instance.
-//
-// Revisit this decision when:
-//   * A fourth capture instance lands and the variability matrix is
-//     stable across all four, OR
-//   * Two of the existing three need the same non-trivial new feature
-//     (multi-field validation, optimistic updates, error recovery).
+// MemoryCapture. See the factoring-decision block in the source — kept
+// parallel until a fourth instance + stable variability matrix.
 // =========================================================================
+
+// trace:EPIC-29 | ai:claude
+//
+// Renders a single chart SVG inline. The SVG is server-rendered and
+// trusted (we control the generator end-to-end). Caption — when
+// present — appears below the chart in muted small caps.
+#[component]
+fn ChartArtifactView(art: ChartArtifact) -> impl IntoView {
+    let svg_html = art.svg;
+    let kind = art.kind.clone();
+    let caption = art.caption.clone();
+    view! {
+        <div class=format!("chart-artifact chart-{}", kind)>
+            <div class="chart-svg" inner_html=svg_html></div>
+            {caption.map(|c| view! { <div class="chart-caption">{c}</div> })}
+        </div>
+    }
+}
 
 // trace:STORY-21 | ai:claude
 //
@@ -1866,7 +1875,9 @@ fn stream_chat(
     user_text: String,
     set_live_text: WriteSignal<String>,
     set_live_tools: WriteSignal<Vec<ToolCall>>,
-    on_done: impl Fn(String, Vec<ToolCall>) + 'static,
+    // trace:EPIC-29 | ai:claude
+    set_live_charts: WriteSignal<Vec<ChartArtifact>>,
+    on_done: impl Fn(String, Vec<ToolCall>, Vec<ChartArtifact>) + 'static,
     on_error: impl Fn(String) + 'static,
 ) {
     use std::cell::RefCell;
@@ -1893,6 +1904,7 @@ fn stream_chat(
     let es_holder: Rc<RefCell<Option<EventSource>>> = Rc::new(RefCell::new(Some(es.clone())));
     let accumulated: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
     let tools: Rc<RefCell<Vec<ToolCall>>> = Rc::new(RefCell::new(vec![]));
+    let charts: Rc<RefCell<Vec<ChartArtifact>>> = Rc::new(RefCell::new(vec![]));
     let on_done = Rc::new(on_done);
     let on_error = Rc::new(on_error);
 
@@ -1928,11 +1940,30 @@ fn stream_chat(
         cb.forget();
     }
 
+    // trace:EPIC-29 | ai:claude
+    // chart event: a chart_* tool produced an SVG artifact.
+    {
+        let charts = charts.clone();
+        let cb = Closure::<dyn FnMut(MessageEvent)>::new(move |ev: MessageEvent| {
+            if let Some(s) = ev.data().as_string() {
+                if let Ok(art) = serde_json::from_str::<ChartArtifact>(&s) {
+                    let mut c = charts.borrow_mut();
+                    c.push(art);
+                    set_live_charts.set(c.clone());
+                }
+            }
+        });
+        es.add_event_listener_with_callback("chart", cb.as_ref().unchecked_ref())
+            .ok();
+        cb.forget();
+    }
+
     // done event: agent finished cleanly
     {
         let es_holder = es_holder.clone();
         let accumulated = accumulated.clone();
         let tools = tools.clone();
+        let charts = charts.clone();
         let on_done = on_done.clone();
         let cb = Closure::<dyn FnMut(MessageEvent)>::new(move |_ev: MessageEvent| {
             if let Some(es) = es_holder.borrow_mut().take() {
@@ -1940,7 +1971,8 @@ fn stream_chat(
             }
             let text = accumulated.borrow().clone();
             let tc = tools.borrow().clone();
-            on_done(text, tc);
+            let arts = charts.borrow().clone();
+            on_done(text, tc, arts);
         });
         es.add_event_listener_with_callback("done", cb.as_ref().unchecked_ref())
             .ok();

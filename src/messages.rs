@@ -23,6 +23,27 @@ pub struct ChatTurn {
     /// Full tool audit trail for this assistant turn. Empty for user turns.
     #[serde(default)]
     pub tool_calls: Vec<ToolCall>,
+    /// trace:EPIC-29 | ai:claude
+    /// Chart artifacts emitted by `chart_*` tools during this turn.
+    /// Empty when the turn produced no visualizations. `default` keeps
+    /// old history rows decodable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chart_artifacts: Vec<ChartArtifact>,
+}
+
+/// One rendered chart, wire-safe (SVG as a String) for SSE + history.
+/// trace:EPIC-29 | ai:claude
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChartArtifact {
+    /// One of `status` / `burndown` / `burnup` / `velocity` /
+    /// `feature_progress`. Frontend uses this as a CSS hook + stable
+    /// identity key.
+    pub kind: String,
+    /// Complete `<svg>...</svg>` markup, dark-theme native (uses
+    /// `var(--text)` / `var(--accent)` / `var(--bg)`).
+    pub svg: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
 }
 
 // trace:STORY-14 | ai:codex
@@ -249,6 +270,7 @@ mod spec_contract_tests {
                     ok: false,
                 },
             ],
+            chart_artifacts: vec![],
         };
 
         let json = serde_json::to_string(&turn).unwrap();
