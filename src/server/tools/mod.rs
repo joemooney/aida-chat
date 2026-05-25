@@ -46,16 +46,14 @@ pub fn all_tool_specs() -> Vec<Tool> {
         aida::aida_resource_spec(),
         aida::aida_comment_add_spec(),
         aida::aida_add_spec(),
+        // trace:STORY-24 | ai:agy
+        aida::aida_ultraplan_spec(),
     ]
 }
 
 /// Dispatch a tool_use block by name + raw JSON input. Returns the
 /// text the agent will see as `tool_result.content`.
-pub async fn dispatch(
-    cfg: &ServerConfig,
-    name: &str,
-    input: &Value,
-) -> Result<String, ToolError> {
+pub async fn dispatch(cfg: &ServerConfig, name: &str, input: &Value) -> Result<String, ToolError> {
     match name {
         "read_file" => fs::read_file(cfg, input).await,
         "list_directory" => fs::list_directory(cfg, input).await,
@@ -68,6 +66,8 @@ pub async fn dispatch(
         "aida_resource" => aida::aida_resource(cfg, input).await,
         "aida_comment_add" => aida::aida_comment_add(cfg, input).await,
         "aida_add" => aida::aida_add(cfg, input).await,
+        // trace:STORY-24 | ai:agy
+        "aida_ultraplan" => aida::aida_ultraplan(cfg, input).await,
         other => Err(ToolError::NotAllowed(format!("unknown tool {other}"))),
     }
 }

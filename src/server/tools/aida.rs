@@ -160,6 +160,27 @@ pub fn aida_add_spec() -> Tool {
     }
 }
 
+// trace:STORY-24 | ai:agy
+pub fn aida_ultraplan_spec() -> Tool {
+    Tool {
+        name: "aida_ultraplan",
+        description: "Generate a structured planning prompt for an AIDA spec, using aida \
+            ultraplan <spec_id>. Returns the assembled prompt the user can paste into a planning \
+            session (e.g. /ultraplan in Claude Code). Use when the user explicitly asks to plan, \
+            decompose, or seed implementation work on an Approved spec.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "spec_id": {
+                    "type": "string",
+                    "description": "SPEC-ID such as STORY-24 or BUG-17"
+                }
+            },
+            "required": ["spec_id"]
+        }),
+    }
+}
+
 // --------------------------------------------------------------------------
 // Executors
 // --------------------------------------------------------------------------
@@ -362,6 +383,25 @@ pub async fn aida_add(cfg: &ServerConfig, input: &Value) -> Result<String, ToolE
     })
 }
 
+// trace:STORY-24 | ai:agy
+pub async fn aida_ultraplan(cfg: &ServerConfig, input: &Value) -> Result<String, ToolError> {
+    let spec_id = input
+        .get("spec_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::BadInput("missing 'spec_id'".into()))?;
+    if !is_spec_id(spec_id) {
+        return Err(ToolError::BadInput(format!(
+            "spec_id does not look like a SPEC-ID: {spec_id}"
+        )));
+    }
+
+    run_aida(
+        cfg,
+        &["ultraplan".into(), spec_id.to_string(), "--stdout".into()],
+    )
+    .await
+}
+
 // --------------------------------------------------------------------------
 // Transport helpers
 // --------------------------------------------------------------------------
@@ -538,5 +578,50 @@ mod tests {
             Some("TASK-1-042")
         );
         assert!(parse_spec_id("no id here").is_none());
+    }
+
+    // trace:STORY-24 | ai:agy
+    #[tokio::test]
+    async fn test_ultraplan_executes_cli_successfully() {
+        use crate::server::config::{Backend, ServerConfig};
+        use std::path::PathBuf;
+
+        let cfg = ServerConfig {
+            backend: Backend::Anthropic,
+            anthropic_api_key: None,
+            model: "test".into(),
+            repo_root: PathBuf::from("."),
+            max_tool_iterations: 1,
+            max_output_tokens: 1024,
+            max_read_bytes: 256 * 1024,
+            session_ttl: std::time::Duration::from_secs(60),
+            mcp_command: PathBuf::from("aida"),
+            mcp_args: vec![],
+        };
+
+        // Rejects bad SPEC-ID shapes
+        let bad_input = json!({ "spec_id": "STORY24" });
+        assert!(aida_ultraplan(&cfg, &bad_input).await.is_err());
+
+        // Succeeds against a known SPEC-ID
+        let good_input = json!({ "spec_id": "STORY-24" });
+        let res = aida_ultraplan(&cfg, &good_input).await;
+        match res {
+            Ok(prompt) => {
+                assert!(
+                    prompt.contains("STORY-24"),
+                    "Prompt should contain SPEC-ID: {}",
+                    prompt
+                );
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                assert!(
+                    err_str.contains("aida exited") || err_str.contains("spawn aida"),
+                    "Unexpected error: {}",
+                    err_str
+                );
+            }
+        }
     }
 }

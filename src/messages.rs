@@ -92,6 +92,24 @@ pub struct SpecResponse {
     pub error: Option<String>,
 }
 
+// trace:STORY-24 | ai:agy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UltraplanRequest {
+    pub spec_id: String,
+}
+
+// trace:STORY-24 | ai:agy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UltraplanResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub error: Option<String>,
+}
+
 #[cfg(test)]
 mod spec_contract_tests {
     // trace:STORY-22 | ai:claude

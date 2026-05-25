@@ -36,6 +36,8 @@ web-sys = { version = "0.3", features = [
     "RequestMode",
     "Response",
     "Headers",
+    "Navigator", # trace:STORY-24 | ai:agy
+    "Clipboard", # trace:STORY-24 | ai:agy
 ] }
 console_error_panic_hook = { version = "0.1", optional = true }
 tower = { version = "0.5", optional = true }

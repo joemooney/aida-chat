@@ -22,7 +22,7 @@ use tokio_stream::StreamExt;
 
 use crate::messages::{
     ChatHistory, ChatTurn, CommentRequest, CommentResponse, CreateSessionResponse, Role,
-    ServerInfo, SpecRequest, SpecResponse,
+    ServerInfo, SpecRequest, SpecResponse, UltraplanRequest, UltraplanResponse,
 };
 use crate::server::agent::{self, AgentEvent};
 use crate::server::backends::claude_cli;
@@ -47,6 +47,8 @@ pub fn router(sessions: Arc<dyn SessionStore>, cfg: Arc<ServerConfig>) -> Router
         .route("/sessions/{id}/history", get(get_history))
         .route("/sessions/{id}/comment", post(add_comment))
         .route("/sessions/{id}/spec", post(add_spec))
+        // trace:STORY-24 | ai:agy
+        .route("/sessions/{id}/ultraplan", post(seed_ultraplan))
         .route("/chat", get(chat_stream))
         .layer(Extension(state))
 }
@@ -184,6 +186,57 @@ fn spec_error(status: StatusCode, error: String) -> (StatusCode, Json<SpecRespon
         Json(SpecResponse {
             ok: false,
             spec_id: None,
+            message: None,
+            error: Some(error),
+        }),
+    )
+}
+
+// trace:STORY-24 | ai:agy
+async fn seed_ultraplan(
+    Extension(state): Extension<ApiState>,
+    Path(id): Path<String>,
+    AxumJson(body): AxumJson<UltraplanRequest>,
+) -> (StatusCode, Json<UltraplanResponse>) {
+    if state.sessions.get(&id).await.is_none() {
+        return ultraplan_error(StatusCode::NOT_FOUND, "unknown session_id".into());
+    }
+
+    let spec_id = body.spec_id;
+    match aida::aida_ultraplan(
+        &state.cfg,
+        &json!({
+            "spec_id": spec_id.clone(),
+        }),
+    )
+    .await
+    {
+        Ok(prompt) => ultraplan_ok(prompt, format!("Plan prompt generated")),
+        Err(ToolError::BadInput(e)) => ultraplan_error(StatusCode::BAD_REQUEST, e),
+        Err(e) => ultraplan_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+// trace:STORY-24 | ai:agy
+fn ultraplan_ok(prompt: String, message: String) -> (StatusCode, Json<UltraplanResponse>) {
+    (
+        StatusCode::OK,
+        Json(UltraplanResponse {
+            ok: true,
+            prompt: Some(prompt),
+            message: Some(message),
+            error: None,
+        }),
+    )
+}
+
+// trace:STORY-24 | ai:agy
+fn ultraplan_error(status: StatusCode, error: String) -> (StatusCode, Json<UltraplanResponse>) {
+    (
+        status,
+        Json(UltraplanResponse {
+            ok: false,
+            prompt: None,
             message: None,
             error: Some(error),
         }),

@@ -321,6 +321,7 @@ Guidelines:
   - When the user asks 'what epics / stories / bugs are open?' or anything about requirements, prefer the aida_* tools.
   - When the user clearly asks to save a substantive discussion summary, design note, or decision to a SPEC, use aida_comment_add sparingly.
   - When the user clearly asks to file work or a defect as a new SPEC, use aida_add sparingly.
+  - When the user asks to plan, decompose, or seed implementation work on a spec, use aida_ultraplan. // trace:STORY-24 | ai:agy
   - When the user asks about code or documentation contents, use grep_repo to locate things, then read_file to inspect specific files.
   - Be concise. Don't paste large file contents back to the user unless they ask.
 
