@@ -217,6 +217,7 @@ html, body {
   gap: 4px;
   margin-bottom: 6px;
 }
+/* trace:STORY-14 | ai:claude — clickable + active states added. */
 .tool-badge {
   font-family: var(--mono);
   font-size: 11px;
@@ -224,9 +225,103 @@ html, body {
   border-radius: 4px;
   border: 1px solid var(--border);
   color: var(--text-dim);
+  background: transparent;
+  cursor: pointer;
+  font-weight: normal;
 }
 .tool-badge.ok  { background: var(--tool-ok); }
 .tool-badge.err { background: var(--tool-err); color: var(--error); }
+.tool-badge:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+.tool-badge.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.tool-badge:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* --- STORY-14: tool-call inspector panel --- */
+.tool-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tool-panels:empty { display: none; }
+.tool-call-panel {
+  margin: 4px 0 4px 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--accent-dim);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.tool-panel-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.tool-panel-status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.tool-panel-status.ok {
+  color: #6ee7a1;
+  border-color: #2a6a45;
+  background: rgba(110, 231, 161, 0.06);
+}
+.tool-panel-status.err {
+  color: var(--error);
+  border-color: #6a2a2a;
+  background: rgba(240, 128, 138, 0.08);
+}
+.tool-panel-duration {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-left: auto;
+}
+.tool-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tool-panel-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tool-panel-pre {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-panel-pre.muted { color: var(--text-dim); font-style: italic; }
 
 .error {
   border: 1px solid var(--error);
