@@ -12,7 +12,7 @@ priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:50:02.458906292Z
-modified_at: 2026-05-25T02:29:46.198853116Z
+modified_at: 2026-05-25T02:30:20.017561176Z
 req_type: Story
 relationships:
 - rel_type: Child
@@ -29,3 +29,8 @@ comments:
   content: 'Backend implementation complete: ToolCall now carries full input/output/duration/ok, SSE tool events serialize that shape, assistant transcript turns persist tool_calls, and cargo test plus live SSE/history smoke passed.'
   created_at: 2026-05-25T02:29:46.198853116Z
   modified_at: 2026-05-25T02:29:46.198853116Z
+- id: 019e5cf8-0a71-7903-93a9-1510248eb0fc
+  author: joe
+  content: 'Opened backend PR #9: https://github.com/joemooney/aida-chat/pull/9. STORY remains in-progress pending frontend landing per ship discipline.'
+  created_at: 2026-05-25T02:30:20.017561176Z
+  modified_at: 2026-05-25T02:30:20.017561176Z
