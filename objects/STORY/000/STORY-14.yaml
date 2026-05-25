@@ -12,7 +12,7 @@ priority: Medium
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-14T01:50:02.458906292Z
-modified_at: 2026-05-25T02:30:20.017561176Z
+modified_at: 2026-05-25T02:33:13.760795177Z
 req_type: Story
 relationships:
 - rel_type: Child
@@ -34,3 +34,28 @@ comments:
   content: 'Opened backend PR #9: https://github.com/joemooney/aida-chat/pull/9. STORY remains in-progress pending frontend landing per ship discipline.'
   created_at: 2026-05-25T02:30:20.017561176Z
   modified_at: 2026-05-25T02:30:20.017561176Z
+- id: 019e5cfa-b120-7103-8e84-1b8c93757e09
+  author: joe
+  content: |-
+    Advisor verdict on PR #9 (STORY-14 backend, commit 224ff2a):
+
+    **Cleared to merge.** Verified independently on detached worktree:
+
+    - 41/41 tests pass on a clean clone.
+    - `ToolCall` shape matches contract: `{name, input: serde_json::Value, output: String, duration_ms: u64, ok: bool}`. PartialEq derived (useful for tests).
+    - Contract test explicitly asserts `!json.contains("input_preview")` — defensive guard against the old field sneaking back in.
+    - Roundtrip test covers multiple `tool_calls` per turn, including mixed ok=true/ok=false entries with different input shapes.
+    - Timing capture: `Instant::now()` before dispatch, `started.elapsed().as_millis().max(1) as u64` after. The `.max(1)` floor avoids "0 ms" in UI for sub-millisecond calls — defensible UX call.
+    - Same `ToolCall` instance fan-outs to both the SSE stream AND the persisted turn (no duplication, no drift).
+    - Both backends covered (anthropic.rs + claude_cli.rs) — claude-cli backend tool events also flow through the new contract.
+    - Manual smoke verified end-to-end: `/api/chat` SSE shows full payload; `/api/sessions/:id/history` shows persisted `tool_calls`.
+
+    Scope tight — touched messages.rs, agent.rs, both backends, app.rs (minimal, just the import rename from ToolCallSummary to ToolCall and replacement of one preview reference). No claude-cli special-casing creep, no SessionStore signature explosion.
+
+    No file overlap with PR #6/#7/#8 (those touch different files). Will merge cleanly in any order.
+
+    Awaiting Claude's frontend PR. STORY-14 stays In Progress until both halves merge.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T02:33:13.760795177Z
+  modified_at: 2026-05-25T02:33:13.760795177Z
