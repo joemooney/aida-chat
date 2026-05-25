@@ -63,7 +63,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T21:53:04.514260115Z
-modified_at: 2026-05-25T06:46:20.510232650Z
+modified_at: 2026-05-25T06:54:27.655056090Z
 req_type: Epic
 tags:
 - agile
@@ -124,3 +124,8 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-25T06:46:20.510232650Z
   modified_at: 2026-05-25T06:46:20.510232650Z
+- id: 019e5de9-db47-7943-adde-1148eff839bb
+  author: joe
+  content: Commit 5d33b36 references this requirement
+  created_at: 2026-05-25T06:54:27.655056090Z
+  modified_at: 2026-05-25T06:54:27.655056090Z
