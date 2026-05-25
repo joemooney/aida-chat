@@ -50,7 +50,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T17:20:18.733667723Z
-modified_at: 2026-05-25T07:08:16.922406370Z
+modified_at: 2026-05-25T07:09:12.299786439Z
 req_type: Epic
 tags:
 - canned-answers
@@ -93,3 +93,8 @@ comments:
   content: 'Codex implemented slices A+B on branch codex/epic-26-query-log-canned in sibling worktree: per-project SQLite query log, canned-answer TOML matcher, /api/chat short-circuit before agent loop, seed canned answers, tests, and smoke for canned + LLM logging.'
   created_at: 2026-05-25T07:08:16.922406370Z
   modified_at: 2026-05-25T07:08:16.922406370Z
+- id: 019e5df7-5aeb-7f83-9b18-3cfd3050a377
+  author: joe
+  content: 'Opened Codex EPIC-26 slices A+B PR #15: https://github.com/joemooney/aida-chat/pull/15. Query log and canned matcher integrated into /api/chat; tests and SSR route smoke passed.'
+  created_at: 2026-05-25T07:09:12.299786439Z
+  modified_at: 2026-05-25T07:09:12.299786439Z
