@@ -9,9 +9,7 @@
 //      explicit subcommand allowlist. Used when MCP returns
 //      `Unavailable`, `Closed`, or `Timeout` — and always for
 //      `aida_history`, since AIDA's MCP server does not expose a
-//      `history` tool. `aida_comment_add` is also CLI-backed until
-//      AIDA's MCP add_comment implementation stores text as comment
-//      content rather than author metadata.
+//      `history` tool.
 //
 // Either way the model can never reach a shell: arguments are passed as
 // explicit `args` (no shell expansion) and the subcommand is fixed.
@@ -307,16 +305,26 @@ pub async fn aida_comment_add(cfg: &ServerConfig, input: &Value) -> Result<Strin
         .and_then(|v| v.as_str())
         .ok_or_else(|| ToolError::BadInput("missing 'text'".into()))?;
     validate_comment_input(spec_id, text)?;
-    run_aida(
-        cfg,
-        &[
-            "comment".into(),
-            "add".into(),
-            spec_id.to_string(),
-            text.to_string(),
-        ],
-    )
-    .await
+
+    // PR-308 fixed the upstream BUG-377-class MCP write persistence issue;
+    // keep MCP as the primary transport and fall back to CLI only when the
+    // MCP transport is unavailable.
+    match try_mcp(cfg, "add_comment", json!({ "id": spec_id, "text": text })).await {
+        Ok(text) => Ok(text),
+        Err(ToolError::Execution(e)) if is_unavailable(&e) => {
+            run_aida(
+                cfg,
+                &[
+                    "comment".into(),
+                    "add".into(),
+                    spec_id.to_string(),
+                    text.to_string(),
+                ],
+            )
+            .await
+        }
+        Err(e) => Err(e),
+    }
 }
 
 // trace:STORY-22 | ai:codex
@@ -335,25 +343,40 @@ pub async fn aida_add(cfg: &ServerConfig, input: &Value) -> Result<String, ToolE
         .unwrap_or("");
     validate_add_input(req_type, title, description)?;
 
-    // Live AIDA 0.5.2 MCP add_requirement advertises add_requirement(type,
-    // title, description, status), but returns success without a CLI-visible
-    // persisted requirement in this repo. Use the CLI write path until that
-    // upstream BUG-377-class behavior is fixed.
-    let output = run_aida(
+    // PR-308 fixed the upstream BUG-377-class MCP write persistence issue;
+    // parse the SPEC-ID from whichever transport succeeds.
+    let output = match try_mcp(
         cfg,
-        &[
-            "add".into(),
-            "--type".into(),
-            req_type.to_string(),
-            "--title".into(),
-            title.to_string(),
-            "--description".into(),
-            description.to_string(),
-            "--status".into(),
-            "draft".into(),
-        ],
+        "add_requirement",
+        json!({
+            "type": req_type,
+            "title": title,
+            "description": description,
+            "status": "draft"
+        }),
     )
-    .await?;
+    .await
+    {
+        Ok(text) => text,
+        Err(ToolError::Execution(e)) if is_unavailable(&e) => {
+            run_aida(
+                cfg,
+                &[
+                    "add".into(),
+                    "--type".into(),
+                    req_type.to_string(),
+                    "--title".into(),
+                    title.to_string(),
+                    "--description".into(),
+                    description.to_string(),
+                    "--status".into(),
+                    "draft".into(),
+                ],
+            )
+            .await?
+        }
+        Err(e) => return Err(e),
+    };
     parse_spec_id(&output).ok_or_else(|| {
         ToolError::Execution(format!(
             "aida add did not return a SPEC-ID: {}",
@@ -536,6 +559,10 @@ mod tests {
         assert_eq!(
             parse_spec_id("Created TASK-1-042 from branch").as_deref(),
             Some("TASK-1-042")
+        );
+        assert_eq!(
+            parse_spec_id("Requirement added: SPEC-007 — mcp smoke").as_deref(),
+            Some("SPEC-007")
         );
         assert!(parse_spec_id("no id here").is_none());
     }
