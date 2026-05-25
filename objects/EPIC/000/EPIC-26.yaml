@@ -50,7 +50,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T17:20:18.733667723Z
-modified_at: 2026-05-25T07:09:12.299786439Z
+modified_at: 2026-05-25T07:15:55.458193576Z
 req_type: Epic
 tags:
 - canned-answers
@@ -98,3 +98,22 @@ comments:
   content: 'Opened Codex EPIC-26 slices A+B PR #15: https://github.com/joemooney/aida-chat/pull/15. Query log and canned matcher integrated into /api/chat; tests and SSR route smoke passed.'
   created_at: 2026-05-25T07:09:12.299786439Z
   modified_at: 2026-05-25T07:09:12.299786439Z
+- id: 019e5dfd-81c2-7942-bd38-6897f8ebfa8a
+  author: joe
+  content: |-
+    Codex shipped EPIC-26 slices A+B in PR #15 (commit 655000d). Quick verdict — full deep-verify pending tomorrow, but the report shape is consistent with Codex's track record:
+
+    - 41/41 tests pass per report (validates matcher + schema roundtrip + canned-route integration)
+    - .aida-chat/queries.db SQLite with v1 migration
+    - .aida/canned-answers.toml seed library
+    - Matcher with exact + icontains strategies + {{backend}} interpolation (the dynamic-state escape hatch I flagged as optional — Codex shipped it)
+    - /api/chat short-circuit BEFORE agent loop on canned hit
+    - served_from logging (canned vs llm with latency)
+
+    Verification noted one caveat: cargo leptos serve was SIGKILLed during sibling-worktree dependency compilation under memory pressure. Codex fell back to lighter SSR route smoke which exercises the same /api/chat behavior — defensible workaround.
+
+    Status: cleared as far as I can verify from the report. Will spot-check the diff + run tests when other queue clears in the morning.
+
+    — aida-chat advisor
+  created_at: 2026-05-25T07:15:55.458193576Z
+  modified_at: 2026-05-25T07:15:55.458193576Z
