@@ -22,11 +22,12 @@ use serde_json::{json, Value};
 use super::{Tool, ToolError};
 use crate::server::charts::{
     data::{
-        compute_burndown, compute_burnup, compute_feature_progress, compute_status_counts,
-        compute_velocity, SprintState,
+        compute_burndown, compute_burnup, compute_cfd, compute_cycle_time, compute_dep_graph,
+        compute_feature_progress, compute_status_counts, compute_velocity, SprintState,
     },
-    render_burndown_svg, render_burnup_svg, render_feature_progress_svg, render_status_svg,
-    render_velocity_svg, AidaStore, Sprint,
+    render_burndown_svg, render_burnup_svg, render_cfd_svg, render_cycle_time_svg,
+    render_dep_graph_svg, render_feature_progress_svg, render_status_svg, render_velocity_svg,
+    AidaStore, Sprint,
 };
 use crate::server::config::ServerConfig;
 
@@ -292,6 +293,238 @@ fn load_store(repo_root: &Path) -> Result<AidaStore, ToolError> {
 
 fn today_yyyy_mm_dd() -> String {
     chrono::Utc::now().format("%Y-%m-%d").to_string()
+}
+
+// =========================================================================
+// V2 chart tools — trace:EPIC-29 | ai:claude
+// =========================================================================
+
+pub fn chart_cfd_spec() -> Tool {
+    Tool {
+        name: "chart_cfd",
+        description: "Render a cumulative-flow diagram (CFD): per-day stacked area of \
+            requirement counts grouped by status. Defaults to a 30-day window. Pass \
+            `window_days` to widen/narrow, and `type_filter` (e.g. 'story') to scope. \
+            Use this when the user asks 'how is flow trending', 'are we accumulating WIP', \
+            or any throughput-over-time question.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "window_days": {
+                    "type": "integer",
+                    "description": "Number of days to include, ending today. Default 30, min 2, max 180.",
+                    "minimum": 2,
+                    "maximum": 180
+                },
+                "type_filter": {
+                    "type": "string",
+                    "description": "Optional req_type to filter (case-insensitive), e.g. 'story' / 'bug' / 'task'."
+                }
+            }
+        }),
+    }
+}
+
+pub fn chart_dep_graph_spec() -> Tool {
+    Tool {
+        name: "chart_dep_graph",
+        description: "Render the dependency graph rooted at a SPEC-ID. BFS through outgoing \
+            relationships up to a depth limit (default 2). Nodes colored by status; edges \
+            labelled by relationship kind. Use this when the user asks 'what depends on X', \
+            'show me the graph around Y', or any spec-relationship question.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "spec_id": {
+                    "type": "string",
+                    "description": "Root SPEC-ID, e.g. 'EPIC-16' or 'STORY-23'."
+                },
+                "depth": {
+                    "type": "integer",
+                    "description": "BFS depth (default 2, max 5).",
+                    "minimum": 1,
+                    "maximum": 5
+                }
+            },
+            "required": ["spec_id"]
+        }),
+    }
+}
+
+pub fn chart_cycle_time_spec() -> Tool {
+    Tool {
+        name: "chart_cycle_time",
+        description: "Render a cycle-time histogram: days from Approved → Completed for items \
+            shipped within the last `window_days` (default 90). Bars in fixed buckets \
+            (0-7, 8-14, 15-30, 31-60, 60+); median + p90 reference lines overlaid. Use this \
+            when the user asks 'how fast are we shipping', 'what's our cycle time', or \
+            anything throughput-quality-related.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "window_days": {
+                    "type": "integer",
+                    "description": "Look-back window in days. Default 90, min 7, max 365.",
+                    "minimum": 7,
+                    "maximum": 365
+                }
+            }
+        }),
+    }
+}
+
+pub async fn chart_cfd(cfg: &ServerConfig, input: &Value) -> Result<ChartToolResult, ToolError> {
+    let store = load_store(&cfg.repo_root)?;
+    let window_days = input
+        .get("window_days")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(30)
+        .clamp(2, 180) as u32;
+    let type_filter = input
+        .get("type_filter")
+        .and_then(|v| v.as_str())
+        .map(str::to_lowercase);
+
+    let items: Vec<&_> = store
+        .items
+        .iter()
+        .filter(|r| match &type_filter {
+            Some(t) => r.req_type.eq_ignore_ascii_case(t),
+            None => true,
+        })
+        .collect();
+
+    let today = today_yyyy_mm_dd();
+    let points = compute_cfd(&items, &today, window_days);
+    let svg = render_cfd_svg(&points)
+        .map_err(|e| ToolError::Execution(format!("render cfd svg: {e}")))?;
+    let active_statuses: std::collections::BTreeSet<&str> = points
+        .iter()
+        .flat_map(|p| p.by_status.keys().map(|k| k.as_str()))
+        .collect();
+    let summary = format!(
+        "Rendered CFD over last {window_days} days{} — {} item(s), {} status bucket(s) active.",
+        type_filter
+            .as_deref()
+            .map(|t| format!(" (type={t})"))
+            .unwrap_or_default(),
+        items.len(),
+        active_statuses.len(),
+    );
+    Ok(ChartToolResult {
+        artifacts: vec![ChartArtifact {
+            kind: "cfd",
+            svg,
+            caption: Some(format!(
+                "{} item(s) · {window_days}-day window",
+                items.len()
+            )),
+        }],
+        summary,
+    })
+}
+
+pub async fn chart_dep_graph(
+    cfg: &ServerConfig,
+    input: &Value,
+) -> Result<ChartToolResult, ToolError> {
+    let spec_id = input
+        .get("spec_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| ToolError::BadInput("missing 'spec_id'".into()))?;
+    if !is_simple_spec_id(spec_id) {
+        return Err(ToolError::BadInput(format!(
+            "spec_id does not look like a SPEC-ID: {spec_id}"
+        )));
+    }
+    let depth = input
+        .get("depth")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(2)
+        .clamp(1, 5) as u32;
+    let store = load_store(&cfg.repo_root)?;
+    if store.by_spec(spec_id).is_none() {
+        return Err(ToolError::BadInput(format!(
+            "no requirement {spec_id} in this project's substrate."
+        )));
+    }
+    let graph = compute_dep_graph(
+        spec_id,
+        depth,
+        |s| store.by_spec(s),
+        |u| store.by_uuid.get(u).map(|&i| &store.items[i]),
+    );
+    let svg = render_dep_graph_svg(&graph)
+        .map_err(|e| ToolError::Execution(format!("render dep graph svg: {e}")))?;
+    let summary = format!(
+        "Rendered dependency graph rooted at {spec_id} (depth={depth}): {} node(s), {} edge(s){}.",
+        graph.nodes.len(),
+        graph.edges.len(),
+        if graph.truncated {
+            " — truncated"
+        } else {
+            ""
+        }
+    );
+    Ok(ChartToolResult {
+        artifacts: vec![ChartArtifact {
+            kind: "dep_graph",
+            svg,
+            caption: Some(format!(
+                "{} node(s) at depth ≤ {depth}",
+                graph.nodes.len()
+            )),
+        }],
+        summary,
+    })
+}
+
+pub async fn chart_cycle_time(
+    cfg: &ServerConfig,
+    input: &Value,
+) -> Result<ChartToolResult, ToolError> {
+    let store = load_store(&cfg.repo_root)?;
+    let window_days = input
+        .get("window_days")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(90)
+        .clamp(7, 365) as u32;
+    let items: Vec<&_> = store.items.iter().collect();
+    let today = today_yyyy_mm_dd();
+    let stats = compute_cycle_time(&items, &today, window_days);
+    let svg = render_cycle_time_svg(&stats)
+        .map_err(|e| ToolError::Execution(format!("render cycle time svg: {e}")))?;
+    let summary = format!(
+        "Rendered cycle-time histogram over last {window_days} days: {} sample(s){}{}.",
+        stats.sample_size,
+        stats
+            .median_days
+            .map(|m| format!(", median={m:.0}d"))
+            .unwrap_or_default(),
+        stats
+            .p90_days
+            .map(|p| format!(", p90={p:.0}d"))
+            .unwrap_or_default(),
+    );
+    Ok(ChartToolResult {
+        artifacts: vec![ChartArtifact {
+            kind: "cycle_time",
+            svg,
+            caption: Some(format!(
+                "n={} · {window_days}-day window",
+                stats.sample_size
+            )),
+        }],
+        summary,
+    })
+}
+
+fn is_simple_spec_id(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() < 64
+        && s.contains('-')
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 #[cfg(test)]

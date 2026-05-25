@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 284" role="img" style="width:100%;max-width:560px;color:var(--text-dim,#8b93a3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;"><text x="30.0" y="14" fill="currentColor" font-size="11" font-weight="600" letter-spacing="0.04em">Dependency graph</text>
+<path d="M 126.0 138.0 C 133.0 138.0, 133.0 38.0, 140.0 38.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="135.0,35.0 140.0,38.0 135.0,41.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 126.0 138.0 C 133.0 138.0, 133.0 78.0, 140.0 78.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="135.0,75.0 140.0,78.0 135.0,81.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 126.0 138.0 C 133.0 138.0, 133.0 118.0, 140.0 118.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="135.0,115.0 140.0,118.0 135.0,121.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 126.0 138.0 C 133.0 138.0, 133.0 158.0, 140.0 158.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="135.0,155.0 140.0,158.0 135.0,161.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 126.0 138.0 C 133.0 138.0, 133.0 198.0, 140.0 198.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="135.0,195.0 140.0,198.0 135.0,201.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 126.0 138.0 C 133.0 138.0, 133.0 238.0, 140.0 238.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="135.0,235.0 140.0,238.0 135.0,241.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 38.0 C 237.0 38.0, 237.0 78.0, 244.0 78.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="239.0,75.0 244.0,78.0 239.0,81.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 38.0 C 133.0 38.0, 133.0 138.0, 36.0 138.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="31.0,135.0 36.0,138.0 31.0,141.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 78.0 C 237.0 78.0, 237.0 118.0, 244.0 118.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="239.0,115.0 244.0,118.0 239.0,121.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 78.0 C 133.0 78.0, 133.0 138.0, 36.0 138.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="31.0,135.0 36.0,138.0 31.0,141.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 118.0 C 237.0 118.0, 237.0 118.0, 244.0 118.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="239.0,115.0 244.0,118.0 239.0,121.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 118.0 C 133.0 118.0, 133.0 138.0, 36.0 138.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="31.0,135.0 36.0,138.0 31.0,141.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 158.0 C 237.0 158.0, 237.0 118.0, 244.0 118.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="239.0,115.0 244.0,118.0 239.0,121.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 158.0 C 133.0 158.0, 133.0 138.0, 36.0 138.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="31.0,135.0 36.0,138.0 31.0,141.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 198.0 C 133.0 198.0, 133.0 138.0, 36.0 138.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="31.0,135.0 36.0,138.0 31.0,141.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 198.0 C 237.0 198.0, 237.0 158.0, 244.0 158.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="239.0,155.0 244.0,158.0 239.0,161.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 198.0 C 237.0 198.0, 237.0 198.0, 244.0 198.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="239.0,195.0 244.0,198.0 239.0,201.0" fill="currentColor" fill-opacity="0.45"/>
+<path d="M 230.0 238.0 C 133.0 238.0, 133.0 138.0, 36.0 138.0" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>
+<polygon points="31.0,135.0 36.0,138.0 31.0,141.0" fill="currentColor" fill-opacity="0.45"/>
+<rect x="36.0" y="124.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1.6"/>
+<text x="44.0" y="136.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">SPRINT-3</text>
+<text x="44.0" y="146.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="140.0" y="24.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#10b981" stroke-width="1"/>
+<text x="148.0" y="36.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-227</text>
+<text x="148.0" y="46.0" fill="#10b981" font-size="8" letter-spacing="0.08em">COMPLETED</text>
+<rect x="140.0" y="64.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="148.0" y="76.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-86</text>
+<text x="148.0" y="86.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="140.0" y="104.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="148.0" y="116.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-50</text>
+<text x="148.0" y="126.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="140.0" y="144.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="148.0" y="156.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-101</text>
+<text x="148.0" y="166.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="140.0" y="184.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="148.0" y="196.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-64</text>
+<text x="148.0" y="206.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="140.0" y="224.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="148.0" y="236.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-3</text>
+<text x="148.0" y="246.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="244.0" y="64.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="252.0" y="76.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-17</text>
+<text x="252.0" y="86.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="244.0" y="104.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="252.0" y="116.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-11</text>
+<text x="252.0" y="126.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="244.0" y="144.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="252.0" y="156.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-149</text>
+<text x="252.0" y="166.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<rect x="244.0" y="184.0" width="90" height="28" rx="6" fill="var(--bg,#0f1115)" stroke="#ef4444" stroke-width="1"/>
+<text x="252.0" y="196.0" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">FR-188</text>
+<text x="252.0" y="206.0" fill="#ef4444" font-size="8" letter-spacing="0.08em">REJECTED</text>
+<text x="380.0" y="276.0" text-anchor="end" fill="currentColor" font-size="9" font-style="italic">truncated at depth 2 — ask for deeper</text>
+</svg>

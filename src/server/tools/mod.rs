@@ -50,11 +50,16 @@ pub fn all_tool_specs() -> Vec<Tool> {
         aida::aida_resource_spec(),
         aida::aida_comment_add_spec(),
         aida::aida_add_spec(),
-        // trace:EPIC-29 | ai:claude
+        // trace:EPIC-29 | ai:claude — V1 chart tools
         charts::chart_status_spec(),
         charts::chart_sprint_spec(),
         charts::chart_feature_spec(),
         drift::verify_trace_drift_spec(),
+        // trace:STORY-24 | ai:agy — (verify when STORY-24 lands)
+        // trace:EPIC-29 | ai:claude — V2 chart tools
+        charts::chart_cfd_spec(),
+        charts::chart_dep_graph_spec(),
+        charts::chart_cycle_time_spec(),
     ]
 }
 
@@ -66,7 +71,12 @@ pub fn all_tool_specs() -> Vec<Tool> {
 pub fn is_chart_tool(name: &str) -> bool {
     matches!(
         name,
-        "chart_status" | "chart_sprint" | "chart_feature"
+        "chart_status"
+            | "chart_sprint"
+            | "chart_feature"
+            | "chart_cfd"
+            | "chart_dep_graph"
+            | "chart_cycle_time"
     )
 }
 
@@ -81,6 +91,10 @@ pub async fn dispatch_chart(
         "chart_status" => charts::chart_status(cfg, input).await,
         "chart_sprint" => charts::chart_sprint(cfg, input).await,
         "chart_feature" => charts::chart_feature(cfg, input).await,
+        // trace:EPIC-29 | ai:claude — V2
+        "chart_cfd" => charts::chart_cfd(cfg, input).await,
+        "chart_dep_graph" => charts::chart_dep_graph(cfg, input).await,
+        "chart_cycle_time" => charts::chart_cycle_time(cfg, input).await,
         other => Err(ToolError::NotAllowed(format!("unknown chart tool {other}"))),
     }
 }

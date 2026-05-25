@@ -27,11 +27,12 @@ use std::process::ExitCode;
 
 use aida_chat::server::charts::{
     data::{
-        compute_burndown, compute_burnup, compute_feature_progress, compute_status_counts,
-        compute_velocity,
+        compute_burndown, compute_burnup, compute_cfd, compute_cycle_time, compute_dep_graph,
+        compute_feature_progress, compute_status_counts, compute_velocity,
     },
-    render_burndown_svg, render_burnup_svg, render_feature_progress_svg, render_status_svg,
-    render_velocity_svg, AidaStore,
+    render_burndown_svg, render_burnup_svg, render_cfd_svg, render_cycle_time_svg,
+    render_dep_graph_svg, render_feature_progress_svg, render_status_svg, render_velocity_svg,
+    AidaStore,
 };
 
 fn main() -> ExitCode {
@@ -138,7 +139,75 @@ fn main() -> ExitCode {
     );
     println!("✓ feature progress: {} feature group(s)", feature_rows.len());
 
-    println!("→ wrote 5 svg files to {}", out_dir.display());
+    // -------- V2 charts (trace:EPIC-29 | ai:claude) --------
+
+    // 6. Cumulative flow (CFD), default 30-day window.
+    let cfd_points = compute_cfd(&items, &today, 30);
+    write_svg(&out_dir, "cfd", render_cfd_svg(&cfd_points));
+    let active_statuses: std::collections::BTreeSet<&str> = cfd_points
+        .iter()
+        .flat_map(|p| p.by_status.keys().map(|k| k.as_str()))
+        .collect();
+    println!(
+        "✓ CFD: {} day(s) × {} active status bucket(s)",
+        cfd_points.len(),
+        active_statuses.len()
+    );
+
+    // 7. Dependency graph. Pick a sensible root: env override, then
+    //    the first Epic encountered, else the first requirement.
+    let root_spec_env = std::env::var("AIDA_CHAT_CHARTS_DEP_ROOT").ok();
+    let dep_root = root_spec_env.as_deref().or_else(|| {
+        store
+            .items
+            .iter()
+            .find(|r| r.req_type.eq_ignore_ascii_case("Epic"))
+            .map(|r| r.spec_id.as_str())
+            .or_else(|| store.items.first().map(|r| r.spec_id.as_str()))
+    });
+    if let Some(root) = dep_root {
+        let graph = compute_dep_graph(
+            root,
+            2,
+            |s| store.by_spec(s),
+            |u| store.by_uuid.get(u).map(|&i| &store.items[i]),
+        );
+        write_svg(&out_dir, "dep_graph", render_dep_graph_svg(&graph));
+        println!(
+            "✓ dep graph rooted at {root}: {} node(s), {} edge(s){}",
+            graph.nodes.len(),
+            graph.edges.len(),
+            if graph.truncated { " (truncated)" } else { "" }
+        );
+    } else {
+        // Truly empty store — render the empty-state SVG so the file
+        // exists for screenshot consistency.
+        let empty = aida_chat::server::charts::data::DepGraph {
+            nodes: vec![],
+            edges: vec![],
+            truncated: false,
+        };
+        write_svg(&out_dir, "dep_graph", render_dep_graph_svg(&empty));
+        println!("✓ dep graph: empty-state (no requirements)");
+    }
+
+    // 8. Cycle-time histogram, default 90-day window.
+    let cycle_stats = compute_cycle_time(&items, &today, 90);
+    write_svg(&out_dir, "cycle_time", render_cycle_time_svg(&cycle_stats));
+    println!(
+        "✓ cycle time: n={}{}{}",
+        cycle_stats.sample_size,
+        cycle_stats
+            .median_days
+            .map(|m| format!(", median={m:.0}d"))
+            .unwrap_or_default(),
+        cycle_stats
+            .p90_days
+            .map(|p| format!(", p90={p:.0}d"))
+            .unwrap_or_default(),
+    );
+
+    println!("→ wrote 8 svg files to {}", out_dir.display());
     ExitCode::SUCCESS
 }
 

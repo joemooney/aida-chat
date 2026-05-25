@@ -15,12 +15,14 @@
 // Empty-state branches return a small `<svg>` with a centered muted message — never
 // a panic, never a blank string.
 
+use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use thiserror::Error;
 
 use super::data::{
-    status_color, BurndownPoint, BurnupPoint, FeatureProgressRow, StatusCounts, VelocityPoint,
+    status_color, BurndownPoint, BurnupPoint, CfdPoint, CycleTimeStats, DepGraph,
+    FeatureProgressRow, StatusCounts, VelocityPoint, STATUS_ORDER,
 };
 
 #[derive(Debug, Error)]
@@ -621,6 +623,397 @@ fn write_polyline<T>(
     Ok(())
 }
 
+// =========================================================================
+// V2 renderers
+// =========================================================================
+
+// trace:EPIC-29 | ai:claude
+/// Stacked-area chart of status counts over time. Each status renders
+/// as its own band, in canonical `STATUS_ORDER`. Y-axis = stack total
+/// (which IS the total count of items for that day).
+pub fn render_cfd_svg(points: &[CfdPoint]) -> Result<String, SvgError> {
+    if points.len() < 2 {
+        return Ok(empty("Not enough data for CFD — window must be at least 2 days."));
+    }
+
+    // Collect the set of statuses present anywhere in the window so the
+    // legend doesn't list zero-only statuses.
+    let mut active_statuses: Vec<String> = Vec::new();
+    for &canon in STATUS_ORDER {
+        if points
+            .iter()
+            .any(|p| p.by_status.get(canon).copied().unwrap_or(0) > 0)
+        {
+            active_statuses.push(canon.to_string());
+        }
+    }
+    // Then append unknown statuses for completeness.
+    let mut other_keys: Vec<String> = Vec::new();
+    for p in points {
+        for k in p.by_status.keys() {
+            if !STATUS_ORDER.contains(&k.as_str()) && !other_keys.contains(k) {
+                other_keys.push(k.clone());
+            }
+        }
+    }
+    active_statuses.extend(other_keys);
+
+    if active_statuses.is_empty() {
+        return Ok(empty(
+            "No requirements with status data in the window. CFD needs at least one item.",
+        ));
+    }
+
+    let max_y = points
+        .iter()
+        .map(|p| p.by_status.values().map(|v| *v as f64).sum())
+        .fold(0.0_f64, f64::max)
+        .max(1.0);
+
+    let n = points.len();
+    let x_at = |i: usize| PAD_LEFT + (i as f64 / (n - 1) as f64) * CHART_W;
+    let y_at = |v: f64| PAD_TOP + CHART_H - (v / max_y) * CHART_H;
+
+    let mut s = String::with_capacity(8192);
+    s.push_str(SVG_OPEN);
+    title(&mut s, "Cumulative flow")?;
+    grid(&mut s, max_y)?;
+
+    // Build cumulative-bottom map per day so each band stacks on the
+    // previous. Render bands in reverse order so earlier statuses
+    // (Draft → Approved → …) appear at the bottom of the stack.
+    let mut cum_at_day: Vec<f64> = vec![0.0; n];
+    for status in &active_statuses {
+        let color = status_color(status);
+        // Top polygon line: cum + count(status).
+        let mut tops: Vec<f64> = Vec::with_capacity(n);
+        for (i, p) in points.iter().enumerate() {
+            let count = p.by_status.get(status).copied().unwrap_or(0) as f64;
+            cum_at_day[i] += count;
+            tops.push(cum_at_day[i]);
+        }
+        let bottoms: Vec<f64> = tops
+            .iter()
+            .enumerate()
+            .map(|(i, t)| t - points[i].by_status.get(status).copied().unwrap_or(0) as f64)
+            .collect();
+        // Polygon: top edge left-to-right, then bottom edge right-to-left.
+        let mut poly = String::with_capacity(n * 24);
+        for (i, t) in tops.iter().enumerate() {
+            if !poly.is_empty() {
+                poly.push(' ');
+            }
+            let _ = write!(poly, "{:.1},{:.1}", x_at(i), y_at(*t));
+        }
+        for (i, b) in bottoms.iter().enumerate().rev() {
+            poly.push(' ');
+            let _ = write!(poly, "{:.1},{:.1}", x_at(i), y_at(*b));
+        }
+        writeln!(
+            s,
+            r#"<polygon points="{poly}" fill="{color}" fill-opacity="0.78" stroke="{color}" stroke-width="0.5"/>"#
+        )?;
+    }
+
+    // X-axis labels: start / middle / end (MM-DD).
+    let label_idxs = [0, n / 2, n - 1];
+    for i in label_idxs {
+        let date = &points[i].date;
+        let short = if date.len() >= 10 { &date[5..10] } else { date };
+        writeln!(
+            s,
+            r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" fill="currentColor" font-size="9">{}</text>"#,
+            x_at(i),
+            H - 6.0,
+            escape_xml(short)
+        )?;
+    }
+
+    // Legend below the chart, two columns when more than 4 statuses.
+    let legend_y0 = H - 6.0;
+    let cols = if active_statuses.len() > 4 { 2 } else { 1 };
+    let per_col = active_statuses.len().div_ceil(cols);
+    for (i, status) in active_statuses.iter().enumerate() {
+        let col = i / per_col;
+        let row = i % per_col;
+        let lx = PAD_LEFT + col as f64 * (CHART_W / cols as f64);
+        let ly = legend_y0 - 14.0 - (per_col - 1 - row) as f64 * 11.0
+            + (per_col as f64 - 1.0) * 11.0;
+        let color = status_color(status);
+        writeln!(
+            s,
+            r#"<rect x="{lx:.1}" y="{:.1}" width="8" height="8" rx="1.5" fill="{color}"/>"#,
+            ly - 7.0
+        )?;
+        writeln!(
+            s,
+            r#"<text x="{:.1}" y="{:.1}" fill="currentColor" font-size="9">{}</text>"#,
+            lx + 12.0,
+            ly,
+            escape_xml(status)
+        )?;
+    }
+
+    s.push_str("</svg>");
+    Ok(s)
+}
+
+// trace:EPIC-29 | ai:claude
+/// Hierarchical dependency-graph layout: columns by depth, nodes
+/// distributed vertically within each column. Edges drawn as light
+/// curves. Node fill color = status. Compact enough to fit inline in a
+/// chat message.
+pub fn render_dep_graph_svg(graph: &DepGraph) -> Result<String, SvgError> {
+    if graph.nodes.is_empty() {
+        return Ok(empty(
+            "Dependency graph empty — unknown SPEC-ID, or no outgoing relationships.",
+        ));
+    }
+
+    // Group nodes by depth.
+    let max_depth = graph.nodes.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut columns: Vec<Vec<usize>> = vec![Vec::new(); max_depth as usize + 1];
+    for (idx, node) in graph.nodes.iter().enumerate() {
+        columns[node.depth as usize].push(idx);
+    }
+    let max_col_size = columns.iter().map(|c| c.len()).max().unwrap_or(1).max(1);
+
+    let cols = columns.len() as f64;
+    let node_w = 90.0_f64;
+    let node_h = 28.0_f64;
+    let h_gap = 14.0_f64;
+    let v_gap = 12.0_f64;
+
+    // Auto-size canvas to fit the densest column + the column count.
+    let width = (PAD_LEFT + PAD_RIGHT + cols * node_w + (cols - 1.0) * h_gap).max(W);
+    let height = (PAD_TOP
+        + PAD_BOTTOM
+        + max_col_size as f64 * node_h
+        + (max_col_size as f64 - 1.0) * v_gap)
+        .max(160.0);
+
+    let mut s = String::with_capacity(4096);
+    let _ = write!(
+        s,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0} {height:.0}" role="img" style="width:100%;max-width:560px;color:var(--text-dim,#8b93a3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;">"#
+    );
+    title(&mut s, "Dependency graph")?;
+
+    // Compute node positions.
+    let col_xs: Vec<f64> = (0..columns.len())
+        .map(|i| PAD_LEFT + i as f64 * (node_w + h_gap))
+        .collect();
+    let mut node_pos: Vec<(f64, f64)> = vec![(0.0, 0.0); graph.nodes.len()];
+    for (col_idx, col) in columns.iter().enumerate() {
+        let col_count = col.len() as f64;
+        let total_h = col_count * node_h + (col_count - 1.0) * v_gap;
+        let y0 = PAD_TOP + (height - PAD_TOP - PAD_BOTTOM - total_h) / 2.0;
+        for (row_idx, &node_idx) in col.iter().enumerate() {
+            let cx = col_xs[col_idx];
+            let cy = y0 + row_idx as f64 * (node_h + v_gap);
+            node_pos[node_idx] = (cx, cy);
+        }
+    }
+
+    // Edges first (under nodes).
+    let spec_to_idx: BTreeMap<&str, usize> = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.spec_id.as_str(), i))
+        .collect();
+    for edge in &graph.edges {
+        let Some(&fi) = spec_to_idx.get(edge.from_spec.as_str()) else {
+            continue;
+        };
+        let Some(&ti) = spec_to_idx.get(edge.to_spec.as_str()) else {
+            continue;
+        };
+        let (fx, fy) = node_pos[fi];
+        let (tx, ty) = node_pos[ti];
+        let from_x = fx + node_w;
+        let from_y = fy + node_h / 2.0;
+        let to_x = tx;
+        let to_y = ty + node_h / 2.0;
+        let mid_x = (from_x + to_x) / 2.0;
+        writeln!(
+            s,
+            r#"<path d="M {from_x:.1} {from_y:.1} C {mid_x:.1} {from_y:.1}, {mid_x:.1} {to_y:.1}, {to_x:.1} {to_y:.1}" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.2"/>"#
+        )?;
+        // Arrowhead at target.
+        writeln!(
+            s,
+            r#"<polygon points="{:.1},{:.1} {:.1},{:.1} {:.1},{:.1}" fill="currentColor" fill-opacity="0.45"/>"#,
+            to_x - 5.0,
+            to_y - 3.0,
+            to_x,
+            to_y,
+            to_x - 5.0,
+            to_y + 3.0
+        )?;
+    }
+
+    // Nodes.
+    for (i, node) in graph.nodes.iter().enumerate() {
+        let (nx, ny) = node_pos[i];
+        let fill = status_color(&node.status);
+        let label_color = if node.depth == 0 { "var(--text,#e6e8ee)" } else { "var(--text,#e6e8ee)" };
+        let stroke_w = if node.depth == 0 { 1.6 } else { 1.0 };
+        writeln!(
+            s,
+            r#"<rect x="{nx:.1}" y="{ny:.1}" width="{node_w}" height="{node_h}" rx="6" fill="var(--bg,#0f1115)" stroke="{fill}" stroke-width="{stroke_w}"/>"#
+        )?;
+        // Spec-ID label (top line, mono).
+        writeln!(
+            s,
+            r#"<text x="{:.1}" y="{:.1}" fill="{label_color}" font-size="10" font-weight="600">{}</text>"#,
+            nx + 8.0,
+            ny + 12.0,
+            escape_xml(&node.spec_id)
+        )?;
+        // Status pill (bottom line, small).
+        writeln!(
+            s,
+            r#"<text x="{:.1}" y="{:.1}" fill="{fill}" font-size="8" letter-spacing="0.08em">{}</text>"#,
+            nx + 8.0,
+            ny + 22.0,
+            escape_xml(&node.status.to_uppercase())
+        )?;
+    }
+
+    if graph.truncated {
+        writeln!(
+            s,
+            r#"<text x="{:.1}" y="{:.1}" text-anchor="end" fill="currentColor" font-size="9" font-style="italic">truncated at depth {} — ask for deeper</text>"#,
+            width - PAD_RIGHT,
+            height - 8.0,
+            max_depth
+        )?;
+    }
+
+    s.push_str("</svg>");
+    Ok(s)
+}
+
+// trace:EPIC-29 | ai:claude
+/// Cycle-time histogram: 5 buckets (0-7, 8-14, 15-30, 31-60, 60+) with
+/// median and p90 vertical reference lines. Empty-state when no items
+/// with both Approved and Completed transitions were found.
+pub fn render_cycle_time_svg(stats: &CycleTimeStats) -> Result<String, SvgError> {
+    if stats.sample_size == 0 {
+        return Ok(empty(
+            "No cycle-time samples. Need items with both Approved → Completed transitions in the window.",
+        ));
+    }
+    let max_y = stats
+        .buckets
+        .iter()
+        .map(|b| b.count as f64)
+        .fold(1.0_f64, f64::max);
+
+    let n = stats.buckets.len() as f64;
+    let bar_gap = 8.0;
+    let bar_w = ((CHART_W - bar_gap * (n - 1.0)) / n).min(56.0);
+    let total_w = n * bar_w + (n - 1.0) * bar_gap;
+    let offset_x = PAD_LEFT + (CHART_W - total_w) / 2.0;
+
+    let mut s = String::with_capacity(2048);
+    s.push_str(SVG_OPEN);
+    title(&mut s, "Cycle-time histogram")?;
+    grid(&mut s, max_y)?;
+
+    // Bars.
+    for (i, bucket) in stats.buckets.iter().enumerate() {
+        let bx = offset_x + i as f64 * (bar_w + bar_gap);
+        let bh = (bucket.count as f64 / max_y) * CHART_H;
+        let by = PAD_TOP + CHART_H - bh;
+        writeln!(
+            s,
+            r##"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="3" fill="#0ea5e9" fill-opacity="0.78"/>"##,
+            bx, by, bar_w, bh
+        )?;
+        if bucket.count > 0 {
+            writeln!(
+                s,
+                r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" fill="var(--text,#e6e8ee)" font-size="10" font-weight="600">{}</text>"#,
+                bx + bar_w / 2.0,
+                by - 4.0,
+                bucket.count
+            )?;
+        }
+        // X-axis bucket label.
+        writeln!(
+            s,
+            r#"<text x="{:.1}" y="{:.1}" text-anchor="middle" fill="currentColor" font-size="9">{}d</text>"#,
+            bx + bar_w / 2.0,
+            H - 6.0,
+            escape_xml(&bucket.label)
+        )?;
+    }
+
+    // Median + p90 reference lines, drawn relative to the bucket
+    // positions (mapping a day-count back to x is approximate because
+    // the buckets aren't a linear axis — we mark them on the bucket
+    // that contains the value).
+    if let Some(median) = stats.median_days {
+        if let Some(bx) = bucket_x(median as u64, offset_x, bar_w, bar_gap) {
+            writeln!(
+                s,
+                r##"<line x1="{bx:.1}" y1="{:.1}" x2="{bx:.1}" y2="{:.1}" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4 2" stroke-opacity="0.85"/>"##,
+                PAD_TOP - 4.0,
+                PAD_TOP + CHART_H
+            )?;
+            writeln!(
+                s,
+                r##"<text x="{bx:.1}" y="{:.1}" text-anchor="middle" fill="#a855f7" font-size="9" font-weight="600">median {:.0}d</text>"##,
+                PAD_TOP - 8.0,
+                median
+            )?;
+        }
+    }
+    if let Some(p90) = stats.p90_days {
+        if let Some(bx) = bucket_x(p90 as u64, offset_x, bar_w, bar_gap) {
+            writeln!(
+                s,
+                r##"<line x1="{bx:.1}" y1="{:.1}" x2="{bx:.1}" y2="{:.1}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 2" stroke-opacity="0.85"/>"##,
+                PAD_TOP - 4.0,
+                PAD_TOP + CHART_H
+            )?;
+            writeln!(
+                s,
+                r##"<text x="{bx:.1}" y="{:.1}" text-anchor="middle" fill="#f59e0b" font-size="9" font-weight="600">p90 {:.0}d</text>"##,
+                PAD_TOP + CHART_H + 14.0,
+                p90
+            )?;
+        }
+    }
+
+    writeln!(
+        s,
+        r#"<text x="{:.1}" y="14" text-anchor="end" fill="currentColor" font-size="9">n={}</text>"#,
+        W - PAD_RIGHT,
+        stats.sample_size
+    )?;
+
+    s.push_str("</svg>");
+    Ok(s)
+}
+
+/// Map a day count back to the center-x of the bucket that contains it.
+fn bucket_x(days: u64, offset_x: f64, bar_w: f64, bar_gap: f64) -> Option<f64> {
+    use super::data::CYCLE_TIME_BUCKETS;
+    for (i, (_, lo, hi)) in CYCLE_TIME_BUCKETS.iter().enumerate() {
+        let in_bucket = match hi {
+            Some(h) => days >= *lo && days <= *h,
+            None => days >= *lo,
+        };
+        if in_bucket {
+            return Some(offset_x + i as f64 * (bar_w + bar_gap) + bar_w / 2.0);
+        }
+    }
+    None
+}
+
 fn legend_swatch(
     out: &mut String,
     x: f64,
@@ -651,6 +1044,8 @@ fn legend_swatch(
 mod tests {
     use super::*;
     use crate::server::charts::data::*;
+    // V2 types — trace:EPIC-29 | ai:claude
+    use super::super::data::{CycleTimeBucket, DepEdge, DepNode};
 
     #[test]
     fn status_empty_state() {
@@ -801,4 +1196,162 @@ mod tests {
         assert!(!svg.contains("<bracket>"));
         assert!(svg.contains("&lt;bracket&gt;"));
     }
+
+    // =====================================================================
+    // V2 renderer tests — trace:EPIC-29 | ai:claude
+    // =====================================================================
+
+    fn cfd_point(date: &str, statuses: &[(&str, u32)]) -> CfdPoint {
+        let mut by_status = std::collections::BTreeMap::new();
+        for (s, n) in statuses {
+            by_status.insert((*s).into(), *n);
+        }
+        CfdPoint {
+            date: date.into(),
+            by_status,
+        }
+    }
+
+    #[test]
+    fn cfd_empty_state_when_window_too_short() {
+        let svg = render_cfd_svg(&[]).unwrap();
+        assert!(svg.contains("Not enough data for CFD"));
+    }
+
+    #[test]
+    fn cfd_renders_one_polygon_per_active_status() {
+        let pts = vec![
+            cfd_point("2026-05-19", &[("Draft", 3)]),
+            cfd_point("2026-05-20", &[("Draft", 2), ("InProgress", 1)]),
+            cfd_point("2026-05-21", &[("Draft", 1), ("InProgress", 2)]),
+            cfd_point("2026-05-22", &[("Completed", 3)]),
+        ];
+        let svg = render_cfd_svg(&pts).unwrap();
+        // One polygon per active status (Draft, InProgress, Completed) = 3.
+        let polygons = svg.matches("<polygon").count();
+        assert_eq!(polygons, 3, "expected 3 polygons in {svg}");
+        // Status colors all present.
+        assert!(svg.contains("#6b7280")); // Draft
+        assert!(svg.contains("#f59e0b")); // InProgress
+        assert!(svg.contains("#10b981")); // Completed
+        // Status names in legend.
+        assert!(svg.contains(">Draft<"));
+        assert!(svg.contains(">InProgress<"));
+        assert!(svg.contains(">Completed<"));
+    }
+
+    #[test]
+    fn dep_graph_empty_state_when_no_nodes() {
+        let g = DepGraph {
+            nodes: vec![],
+            edges: vec![],
+            truncated: false,
+        };
+        let svg = render_dep_graph_svg(&g).unwrap();
+        assert!(svg.contains("Dependency graph empty"));
+    }
+
+    #[test]
+    fn dep_graph_renders_nodes_with_status_colors() {
+        let g = DepGraph {
+            nodes: vec![
+                DepNode {
+                    spec_id: "EPIC-1".into(),
+                    status: "Approved".into(),
+                    depth: 0,
+                },
+                DepNode {
+                    spec_id: "STORY-1".into(),
+                    status: "InProgress".into(),
+                    depth: 1,
+                },
+            ],
+            edges: vec![DepEdge {
+                from_spec: "EPIC-1".into(),
+                to_spec: "STORY-1".into(),
+                kind: "Custom:parent_of".into(),
+            }],
+            truncated: false,
+        };
+        let svg = render_dep_graph_svg(&g).unwrap();
+        assert!(svg.contains(">EPIC-1<"));
+        assert!(svg.contains(">STORY-1<"));
+        // Approved + InProgress colors present as strokes.
+        assert!(svg.contains("#3b82f6"));
+        assert!(svg.contains("#f59e0b"));
+        // Edge path present.
+        assert!(svg.contains("<path d=\"M "));
+        // Arrowhead polygon.
+        assert!(svg.contains("<polygon"));
+    }
+
+    #[test]
+    fn dep_graph_marks_truncation() {
+        let g = DepGraph {
+            nodes: vec![DepNode {
+                spec_id: "X".into(),
+                status: "Draft".into(),
+                depth: 0,
+            }],
+            edges: vec![],
+            truncated: true,
+        };
+        let svg = render_dep_graph_svg(&g).unwrap();
+        assert!(svg.contains("truncated at depth"));
+    }
+
+    #[test]
+    fn cycle_time_empty_state_when_no_samples() {
+        let stats = CycleTimeStats {
+            buckets: vec![],
+            sample_size: 0,
+            median_days: None,
+            p90_days: None,
+        };
+        let svg = render_cycle_time_svg(&stats).unwrap();
+        assert!(svg.contains("No cycle-time samples"));
+    }
+
+    #[test]
+    fn cycle_time_renders_bars_and_reference_lines() {
+        let stats = CycleTimeStats {
+            buckets: vec![
+                CycleTimeBucket {
+                    label: "0–7".into(),
+                    count: 1,
+                },
+                CycleTimeBucket {
+                    label: "8–14".into(),
+                    count: 1,
+                },
+                CycleTimeBucket {
+                    label: "15–30".into(),
+                    count: 0,
+                },
+                CycleTimeBucket {
+                    label: "31–60".into(),
+                    count: 1,
+                },
+                CycleTimeBucket {
+                    label: "60+".into(),
+                    count: 0,
+                },
+            ],
+            sample_size: 3,
+            median_days: Some(13.0),
+            p90_days: Some(41.0),
+        };
+        let svg = render_cycle_time_svg(&stats).unwrap();
+        // Bars colored sky-blue.
+        assert!(svg.contains("#0ea5e9"));
+        // Median + p90 reference lines + labels.
+        assert!(svg.contains("median 13d"));
+        assert!(svg.contains("p90 41d"));
+        // Sample size annotation.
+        assert!(svg.contains("n=3"));
+        // X-axis bucket labels with `d` suffix.
+        assert!(svg.contains(">0–7d<"));
+        assert!(svg.contains(">60+d<"));
+    }
 }
+
