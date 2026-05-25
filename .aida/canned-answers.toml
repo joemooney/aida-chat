@@ -1,0 +1,21 @@
+# trace:EPIC-26 | ai:codex
+
+[[answers]]
+match = "what is aida-chat?"
+strategy = "exact"
+answer = "aida-chat is a scoped Rust + Leptos chat interface for an AIDA project. It streams assistant responses, exposes project-confined tools, and grounds answers in the local AIDA substrate."
+
+[[answers]]
+match = "what backend am i on?"
+strategy = "exact"
+answer = "You are currently on the {{backend}} backend."
+
+[[answers]]
+match = "hi"
+strategy = "exact"
+answer = "Hi. I am aida-chat, ready to answer questions about this repo and its AIDA requirements."
+
+[[answers]]
+match = "hello"
+strategy = "exact"
+answer = "Hello. I am aida-chat, ready to answer questions about this repo and its AIDA requirements."
