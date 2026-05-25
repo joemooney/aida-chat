@@ -88,10 +88,9 @@ async fn main() -> ExitCode {
         "mcp_smoke temporary add_comment check {}",
         std::process::id()
     );
-    // Live tools/list advertises add_comment(id, text). Current AIDA stores
-    // that text as the author and hardcodes the body to "mcp"; this smoke
-    // exercises and cleans up the live MCP behavior so aida-chat can keep
-    // using the CLI write path until the upstream tool is fixed.
+    // Live tools/list advertises add_comment(id, text). PR-308 fixed the
+    // upstream persistence bug; this must now be visible through the CLI and
+    // cleaned up below.
     step!(
         "tools/call add_comment STORY-21",
         client.call_tool(
@@ -100,10 +99,7 @@ async fn main() -> ExitCode {
         )
     );
     match delete_smoke_comment("STORY-21", &comment_marker) {
-        Ok(true) => println!("✓ cleaned up temporary add_comment smoke comment"),
-        Ok(false) => {
-            println!("⚠ add_comment returned ok, but no persisted comment was visible to clean up")
-        }
+        Ok(()) => println!("✓ cleaned up temporary add_comment smoke comment"),
         Err(e) => {
             println!("FAIL: cleanup temporary comment: {e}");
             return ExitCode::FAILURE;
@@ -111,11 +107,9 @@ async fn main() -> ExitCode {
     }
 
     let req_marker = format!("mcp_smoke temporary add_requirement {}", std::process::id());
-    // Live AIDA 0.5.2 tools/list advertises add_requirement(type, title,
-    // description, status). This smoke intentionally checks whether the
-    // success response is backed by a CLI-visible persisted requirement;
-    // STORY-22 keeps the product write path on `aida add` while this returns
-    // success without persistence.
+    // Live tools/list advertises add_requirement(type, title, description,
+    // status). PR-308 fixed the upstream persistence bug; this must now be
+    // visible through the CLI and cleaned up below.
     step!(
         "tools/call add_requirement task",
         client.call_tool(
@@ -129,12 +123,9 @@ async fn main() -> ExitCode {
         )
     );
     match delete_smoke_requirement(&req_marker) {
-        Ok(Some(spec_id)) => {
+        Ok(spec_id) => {
             println!("✓ cleaned up temporary add_requirement smoke spec {spec_id}")
         }
-        Ok(None) => println!(
-            "⚠ add_requirement returned ok, but no persisted requirement was visible to clean up"
-        ),
         Err(e) => {
             println!("FAIL: cleanup temporary requirement: {e}");
             return ExitCode::FAILURE;
@@ -145,7 +136,7 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn delete_smoke_comment(spec_id: &str, marker: &str) -> Result<bool, String> {
+fn delete_smoke_comment(spec_id: &str, marker: &str) -> Result<(), String> {
     let out = StdCommand::new("aida")
         .args(["comment", "list", spec_id])
         .output()
@@ -177,7 +168,7 @@ fn delete_smoke_comment(spec_id: &str, marker: &str) -> Result<bool, String> {
                 .output()
                 .map_err(|e| format!("spawn aida comment delete: {e}"))?;
             if delete.status.success() {
-                return Ok(true);
+                return Ok(());
             }
             return Err(format!(
                 "aida comment delete exited with {}: {}",
@@ -186,10 +177,10 @@ fn delete_smoke_comment(spec_id: &str, marker: &str) -> Result<bool, String> {
             ));
         }
     }
-    Ok(false)
+    Err("temporary comment marker not found".into())
 }
 
-fn delete_smoke_requirement(marker: &str) -> Result<Option<String>, String> {
+fn delete_smoke_requirement(marker: &str) -> Result<String, String> {
     let out = StdCommand::new("aida")
         .args(["search", marker])
         .output()
@@ -203,14 +194,14 @@ fn delete_smoke_requirement(marker: &str) -> Result<Option<String>, String> {
     }
     let stdout = String::from_utf8_lossy(&out.stdout);
     let Some(spec_id) = parse_spec_id(&stdout) else {
-        return Ok(None);
+        return Err("temporary requirement marker not found".into());
     };
     let delete = StdCommand::new("aida")
         .args(["del", "-y", &spec_id])
         .output()
         .map_err(|e| format!("spawn aida del: {e}"))?;
     if delete.status.success() {
-        Ok(Some(spec_id))
+        Ok(spec_id)
     } else {
         Err(format!(
             "aida del exited with {}: {}",
