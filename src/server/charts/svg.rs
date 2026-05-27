@@ -267,7 +267,18 @@ pub fn render_burndown_svg(points: &[BurndownPoint]) -> Result<String, SvgError>
     grid(&mut s, max_y)?;
 
     // Ideal line (dashed gray).
-    write_polyline(&mut s, points, &x_at, &y_at, |p| p.ideal, "#6b7280", 1.5, true)?;
+    write_polyline(
+        &mut s,
+        points,
+        &x_at,
+        &y_at,
+        |p| p.ideal,
+        LineStyle {
+            color: "#6b7280",
+            width: 1.5,
+            dashed: true,
+        },
+    )?;
     // Actual line (solid blue).
     write_polyline(
         &mut s,
@@ -275,9 +286,11 @@ pub fn render_burndown_svg(points: &[BurndownPoint]) -> Result<String, SvgError>
         &x_at,
         &y_at,
         |p| p.remaining,
-        "#3b82f6",
-        2.0,
-        false,
+        LineStyle {
+            color: "#3b82f6",
+            width: 2.0,
+            dashed: false,
+        },
     )?;
 
     // Data dots on actual.
@@ -358,7 +371,10 @@ pub fn render_burnup_svg(points: &[BurnupPoint]) -> Result<String, SvgError> {
         area.push_str(&format!("{:.1},{:.1} ", x_at(i), y_at(p.completed)));
     }
     area.push_str(&format!("{:.1},{:.1}", x_at(n - 1), y_at(0.0)));
-    writeln!(s, r##"<polygon points="{area}" fill="#10b981" fill-opacity="0.12"/>"##)?;
+    writeln!(
+        s,
+        r##"<polygon points="{area}" fill="#10b981" fill-opacity="0.12"/>"##
+    )?;
 
     // Scope line (amber dashed).
     write_polyline(
@@ -367,9 +383,11 @@ pub fn render_burnup_svg(points: &[BurnupPoint]) -> Result<String, SvgError> {
         &x_at,
         &y_at,
         |p| p.scope,
-        "#f59e0b",
-        1.5,
-        true,
+        LineStyle {
+            color: "#f59e0b",
+            width: 1.5,
+            dashed: true,
+        },
     )?;
     // Completed line (solid emerald).
     write_polyline(
@@ -378,9 +396,11 @@ pub fn render_burnup_svg(points: &[BurnupPoint]) -> Result<String, SvgError> {
         &x_at,
         &y_at,
         |p| p.completed,
-        "#10b981",
-        2.0,
-        false,
+        LineStyle {
+            color: "#10b981",
+            width: 2.0,
+            dashed: false,
+        },
     )?;
 
     for (i, p) in points.iter().enumerate() {
@@ -518,9 +538,7 @@ pub fn render_velocity_svg(points: &[VelocityPoint]) -> Result<String, SvgError>
 
 pub fn render_feature_progress_svg(rows: &[FeatureProgressRow]) -> Result<String, SvgError> {
     if rows.is_empty() {
-        return Ok(empty(
-            "No requirements grouped by feature.",
-        ));
+        return Ok(empty("No requirements grouped by feature."));
     }
     // Auto-size H to fit; cap rows shown to 8 to keep the chart compact.
     let shown: Vec<&FeatureProgressRow> = rows.iter().take(8).collect();
@@ -598,15 +616,19 @@ pub fn render_feature_progress_svg(rows: &[FeatureProgressRow]) -> Result<String
 // Helpers shared across line charts
 // =========================================================================
 
+struct LineStyle<'a> {
+    color: &'a str,
+    width: f64,
+    dashed: bool,
+}
+
 fn write_polyline<T>(
     out: &mut String,
     points: &[T],
     x_at: &dyn Fn(usize) -> f64,
     y_at: &dyn Fn(f64) -> f64,
     project: impl Fn(&T) -> f64,
-    color: &str,
-    width: f64,
-    dashed: bool,
+    style: LineStyle<'_>,
 ) -> std::fmt::Result {
     let mut pts = String::with_capacity(points.len() * 12);
     for (i, p) in points.iter().enumerate() {
@@ -615,7 +637,13 @@ fn write_polyline<T>(
         }
         let _ = write!(pts, "{:.1},{:.1}", x_at(i), y_at(project(p)));
     }
-    let dash_attr = if dashed { r#" stroke-dasharray="6 3""# } else { "" };
+    let dash_attr = if style.dashed {
+        r#" stroke-dasharray="6 3""#
+    } else {
+        ""
+    };
+    let color = style.color;
+    let width = style.width;
     writeln!(
         out,
         r#"<polyline points="{pts}" fill="none" stroke="{color}" stroke-width="{width}"{dash_attr}/>"#
@@ -633,7 +661,9 @@ fn write_polyline<T>(
 /// (which IS the total count of items for that day).
 pub fn render_cfd_svg(points: &[CfdPoint]) -> Result<String, SvgError> {
     if points.len() < 2 {
-        return Ok(empty("Not enough data for CFD — window must be at least 2 days."));
+        return Ok(empty(
+            "Not enough data for CFD — window must be at least 2 days.",
+        ));
     }
 
     // Collect the set of statuses present anywhere in the window so the
@@ -737,8 +767,8 @@ pub fn render_cfd_svg(points: &[CfdPoint]) -> Result<String, SvgError> {
         let col = i / per_col;
         let row = i % per_col;
         let lx = PAD_LEFT + col as f64 * (CHART_W / cols as f64);
-        let ly = legend_y0 - 14.0 - (per_col - 1 - row) as f64 * 11.0
-            + (per_col as f64 - 1.0) * 11.0;
+        let ly =
+            legend_y0 - 14.0 - (per_col - 1 - row) as f64 * 11.0 + (per_col as f64 - 1.0) * 11.0;
         let color = status_color(status);
         writeln!(
             s,
@@ -786,11 +816,9 @@ pub fn render_dep_graph_svg(graph: &DepGraph) -> Result<String, SvgError> {
 
     // Auto-size canvas to fit the densest column + the column count.
     let width = (PAD_LEFT + PAD_RIGHT + cols * node_w + (cols - 1.0) * h_gap).max(W);
-    let height = (PAD_TOP
-        + PAD_BOTTOM
-        + max_col_size as f64 * node_h
-        + (max_col_size as f64 - 1.0) * v_gap)
-        .max(160.0);
+    let height =
+        (PAD_TOP + PAD_BOTTOM + max_col_size as f64 * node_h + (max_col_size as f64 - 1.0) * v_gap)
+            .max(160.0);
 
     let mut s = String::with_capacity(4096);
     let _ = write!(
@@ -857,7 +885,7 @@ pub fn render_dep_graph_svg(graph: &DepGraph) -> Result<String, SvgError> {
     for (i, node) in graph.nodes.iter().enumerate() {
         let (nx, ny) = node_pos[i];
         let fill = status_color(&node.status);
-        let label_color = if node.depth == 0 { "var(--text,#e6e8ee)" } else { "var(--text,#e6e8ee)" };
+        let label_color = "var(--text,#e6e8ee)";
         let stroke_w = if node.depth == 0 { 1.6 } else { 1.0 };
         writeln!(
             s,
@@ -1022,7 +1050,11 @@ fn legend_swatch(
     label: &str,
     dashed: bool,
 ) -> std::fmt::Result {
-    let dash = if dashed { r#" stroke-dasharray="3 2""# } else { "" };
+    let dash = if dashed {
+        r#" stroke-dasharray="3 2""#
+    } else {
+        ""
+    };
     writeln!(
         out,
         r#"<line x1="{:.1}" y1="{:.1}" x2="{:.1}" y2="{:.1}" stroke="{color}" stroke-width="2"{dash}/>"#,
@@ -1068,7 +1100,7 @@ mod tests {
         // Two segment <path>s, one each color.
         assert!(svg.contains("#10b981")); // Completed
         assert!(svg.contains("#f59e0b")); // InProgress
-        // Total in the center.
+                                          // Total in the center.
         assert!(svg.contains(">4<"));
         // Legend percent labels.
         assert!(svg.contains("(75%)"));
@@ -1234,7 +1266,7 @@ mod tests {
         assert!(svg.contains("#6b7280")); // Draft
         assert!(svg.contains("#f59e0b")); // InProgress
         assert!(svg.contains("#10b981")); // Completed
-        // Status names in legend.
+                                          // Status names in legend.
         assert!(svg.contains(">Draft<"));
         assert!(svg.contains(">InProgress<"));
         assert!(svg.contains(">Completed<"));
@@ -1354,4 +1386,3 @@ mod tests {
         assert!(svg.contains(">60+d<"));
     }
 }
-
