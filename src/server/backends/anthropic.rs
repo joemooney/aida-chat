@@ -243,9 +243,7 @@ async fn anthropic_round(
         let chunk = chunk.map_err(|e| format!("anthropic stream: {e}"))?;
         parser.push(&chunk);
         while let Some(event) = parser.next_event() {
-            if let Err(e) = handle_event(&event, &mut state, &text_tx).await {
-                return Err(e);
-            }
+            handle_event(&event, &mut state, &text_tx).await?;
         }
     }
     parser.flush();

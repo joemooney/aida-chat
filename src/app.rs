@@ -938,7 +938,7 @@ fn DriftCapture(
     session_id: ReadSignal<Option<String>>,
 ) -> impl IntoView {
     let Some(initial_spec_id) = extract_first_spec_id(&body_text) else {
-        return view! {}.into_any();
+        return ().into_any();
     };
     let spec_sv = StoredValue::new(initial_spec_id);
     let (submitting, set_submitting) = signal(false);
@@ -982,7 +982,7 @@ fn DriftCapture(
 
     let rows = move || {
         let Some(response) = result.get() else {
-            return view! {}.into_any();
+            return ().into_any();
         };
         response
             .findings

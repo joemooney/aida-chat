@@ -128,7 +128,7 @@ fn validate_memory_input(
             "type must be one of user, feedback, project, reference: {memory_type}"
         )));
     }
-    if body.as_bytes().len() > MAX_BODY_BYTES {
+    if body.len() > MAX_BODY_BYTES {
         return Err(ToolError::BadInput("body may not exceed 16 KiB".into()));
     }
     Ok(())
