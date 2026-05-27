@@ -1,0 +1,12 @@
+id: 019e683a-9e14-75f0-ae48-244fd9bdc51d
+spec_id: TASK-31
+agreed_id: TASK-31
+title: Harden EPIC-26 query log completion semantics
+description: Current /api/chat inserts query rows before canned-answer matching and completes rows when SSE emits Done/Error. Rows can remain unfinished if canned-answer loading fails, the client disconnects early, or the agent task dies without a terminal event. Add status/error fields and stale-open-row reconciliation. Reference docs/aida/2026-05-26-codex-system-improvement-audit.md.
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-27T06:58:52.564018367Z
+modified_at: 2026-05-27T06:58:52.564018367Z
+req_type: Task
