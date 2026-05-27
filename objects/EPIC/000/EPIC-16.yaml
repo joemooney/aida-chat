@@ -8,7 +8,7 @@ priority: High
 owner: ''
 feature: Uncategorized
 created_at: 2026-05-24T07:06:31.115659540Z
-modified_at: 2026-05-25T16:15:00.049902824Z
+modified_at: 2026-05-27T06:58:17.714919471Z
 req_type: Epic
 tags:
 - first-consumer
@@ -255,3 +255,8 @@ comments:
     — aida-chat advisor
   created_at: 2026-05-25T16:15:00.049902824Z
   modified_at: 2026-05-25T16:15:00.049902824Z
+- id: 019e683a-15f2-7322-91e7-d277cf1f9dbb
+  author: joe
+  content: 'Codex post-merge system audit completed. PR #19 opened for clippy warning-gate cleanup and audit note: https://github.com/joemooney/aida-chat/pull/19. Audit doc recommends CI baseline, query-log completion hardening, drift partial-results resilience, tool-call payload caps, auth/rate-limit promotion, capture endpoint helper, and runtime health endpoint.'
+  created_at: 2026-05-27T06:58:17.714919471Z
+  modified_at: 2026-05-27T06:58:17.714919471Z
