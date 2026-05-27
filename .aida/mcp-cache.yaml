@@ -256,6 +256,81 @@ requirements:
   - rel_type: Parent
     target_id: 019e242d-32da-7a31-9af2-950e26f1b776
     created_at: 2026-05-14T01:50:02.987234174Z
+- id: 019e5bfa-3402-7092-8456-56fb20cf2c5d
+  spec_id: EPIC-29
+  agreed_id: EPIC-29
+  title: 'Agile query library: canned reports + AI-generated reusable artifacts + plug-in starter pack'
+  description: |-
+    ## Why
+
+    AIDA's vocabulary is agile (epic / story / task / bug / sprint / blocked / etc.). Many user questions are themselves agile-shaped: "what's blocked", "show me sprint burndown", "what's the dependency graph for EPIC-N", "which stories changed this week". These have *deterministic answers* — there's no judgment for the LLM to add; the substrate has the data, the query just needs to run.
+
+    Three compounding wins from treating these as a first-class library instead of LLM-per-call:
+
+    1. **No LLM round-trip needed** for the common cases. Canned answer tier of [[EPIC-26]] applies directly. Sidesteps the Tier 1 rate limit (30k tokens/min) we just hit during killer-demo dry-run.
+    2. **Sidesteps MCP read-path bugs.** [[BUG-381]] (status filter on `list_requirements`) blocks the chat path today for "what's in progress?". A canned query backed by `aida list --status in-progress` (CLI) just works — no upstream dependency.
+    3. **AI-generated artifacts become infrastructure.** When the LLM does write a novel query (jq filter, mermaid graph spec, dot file, dashboard fragment), saving the artifact back to the library means it runs from cache forever after. Generic chat answers a question once per query; aida-chat answers it once and the answer becomes infrastructure.
+
+    ## Differentiation lift
+
+    Every query that graduates to canned = one less generic-LLM-eligible question. Every artifact saved = one less per-session token spend. The library compounds value over the project's lifetime; generic chat starts from zero each session.
+
+    ## Composes with
+
+    - **[[EPIC-26]]** — skill registry + canned matcher mechanics. This EPIC is the first concrete *domain application* of EPIC-26's general framework.
+    - **[[STORY-20]]** — plug-in packaging. The starter library ships with the install; per-project queries accumulate from there.
+    - **AIDA core** — possibly. Some agile primitives (cycle time, velocity, dependency walks) might belong in `aida` itself so non-chat surfaces benefit too. See Open Question #1.
+
+    ## Decomposition (not yet broken out — awaiting EPIC-26 sequencing decisions)
+
+    - **A: Artifact format + storage layout.** `.aida/queries/<name>.{ext}` or similar. Each artifact has a name, description, output kind (text | table | graph), invocation (shell / jq / mermaid template / etc.).
+    - **B: Seed library.** Ship ~7-8 starter queries with aida-chat:
+      - `in-progress` — list stories currently in-progress
+      - `blocked` — stories tagged blocked or with unresolved-dep relationships
+      - `recent-activity` — what's been touched in the last N days
+      - `sprint-burndown` — completed-vs-remaining over time (if substrate carries sprint metadata)
+      - `velocity` — completed per week, last K weeks
+      - `dep-graph EPIC-N` — mermaid dependency graph rooted at a SPEC-ID
+      - `bugs-by-component` — bug count grouped by tag or path heuristic
+      - `cycle-time` — average days between Approved → Completed for shipped stories
+    - **C: Query discovery + execution tools.** Two new tools for the agent: `list_queries` (returns the library) and `run_query(name, args?)` (executes the allowlisted artifact). Skill-registry-aware so the model can pick the right query from a natural-language ask.
+    - **D: AI-generated → save-back workflow.** When the LLM writes a novel artifact in response to a question, offer "save as canned query?" affordance. Operator names + approves; artifact lands in `.aida/queries/`. Hits feedback-loop pattern from STORY-21..25.
+    - **E: Graph artifact rendering surface.** Chat UI renders mermaid/dot inline. Server-side fallback for environments without browser-side rendering. Probably mermaid first (markdown-native, lighter dep).
+    - **F: Plug-in starter-pack bundling + per-project overrides.** `aida-chat init` (or equivalent) drops the seed library into `.aida/queries/`. Project-specific additions accumulate alongside. Composes with STORY-20.
+
+    Slice order when this EPIC activates (suggested): A (format) → B+C in parallel (seed library + execution tools — independent surfaces) → E (graph rendering, lighter UI work) → D (save-back loop, depends on B+C) → F (packaging, depends on stable library shape).
+
+    ## Open questions for operator + master
+
+    1. **AIDA core vs aida-chat split.** Where does the library live? My read: core agile primitives (`list_requirements` with proper filters, `cycle_time`, `dep_walk`) belong in AIDA core so non-chat surfaces benefit; rendering + UI affordances live in aida-chat. But the agile vocabulary is currently aida-chat-flavored — worth master's read on whether to graduate primitives to core.
+    2. **Artifact execution surface.** Likely candidates: shell scripts (allowlisted via path confinement), jq filters over `aida list --json`, mermaid template files, lua/starlark sandbox. Each has security + portability tradeoffs. A small ADR before implementer work is warranted.
+    3. **Library curation model.** Per-project file, AIDA-shipped baseline + per-project overrides, or community-contributable? Affects discoverability and how EPIC-26's FAQ-review-loop interacts with library growth.
+
+    ## Out of scope (for this EPIC)
+
+    - Live dashboards (separate scope; standalone UI surface, not chat-embedded)
+    - Historical analytics requiring event-sourcing of substrate changes (would need substrate-change journaling; bigger story)
+    - Cross-project rollups (multi-project is itself out of scope for current aida-chat MVP)
+    - Workflow automation (canned-queries are read-only by default; writes stay in the capture loops STORY-21..25)
+
+    ## Day-2+ pickup
+
+    Filing as Draft per [[feedback-dont-pivot-day1-for-new-scope]]. Day-1 close is the killer demo recording, not this. After day-1 closes, decide priority + sequencing relative to EPIC-26's foundation slice (which gates the skill-registry mechanics this EPIC builds on).
+  status: Draft
+  priority: High
+  owner: ''
+  feature: 1-Uncategorized
+  created_at: 2026-05-24T21:53:04.514260115Z
+  modified_at: 2026-05-24T21:53:04.514260115Z
+  req_type: Epic
+  tags:
+  - agile
+  - artifact-reuse
+  - canned-queries
+  - domain-application
+  - plug-in
+  - query-library
+  - substrate-grounded
 - id: 019e2411-7b21-7b61-8e66-9f747a2db659
   spec_id: EPIC-1
   agreed_id: EPIC-1
@@ -361,7 +436,7 @@ requirements:
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T17:20:18.733667723Z
-  modified_at: 2026-05-24T17:30:46.609524180Z
+  modified_at: 2026-05-24T21:53:52.580499814Z
   req_type: Epic
   tags:
   - canned-answers
@@ -391,6 +466,14 @@ requirements:
       — master advisor verdict / aida-chat advisor recording
     created_at: 2026-05-24T17:30:46.609524180Z
     modified_at: 2026-05-24T17:30:46.609524180Z
+  - id: 019e5bfa-efc4-7fb1-81c5-c00f2c15bc08
+    author: joe
+    content: |-
+      Cross-link 2026-05-24: filed EPIC-29 (Agile query library) as the first concrete *domain application* of this EPIC's skill-registry + canned-answer mechanics. EPIC-29 makes EPIC-26 considerably more concrete — agile vocabulary (in-progress, blocked, burndown, dep-graph, etc.) is the natural seed library, with the FAQ-review-loop from this EPIC's slice D growing it over time. When this EPIC's sequencing comes up, prioritize the skill-registry slice (C) so EPIC-29 has somewhere to land. Per operator strategic input — see EPIC-29 body for the differentiation lift + the BUG-381 sidestep angle (canned queries via CLI bypass the silent-empty bug entirely).
+
+      — aida-chat advisor
+    created_at: 2026-05-24T21:53:52.580499814Z
+    modified_at: 2026-05-24T21:53:52.580499814Z
 - id: 019e2432-7aa7-7961-b6e1-48a5e4f66a52
   spec_id: STORY-15
   agreed_id: STORY-15
@@ -541,18 +624,24 @@ requirements:
   agreed_id: STORY-17
   title: Substrate-grounded context assembly with source attribution
   description: ''
-  status: Approved
+  status: Completed
   priority: High
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:27.368395128Z
-  modified_at: 2026-05-24T07:07:27.368395128Z
+  modified_at: 2026-05-24T20:43:19.213422932Z
   req_type: Story
   tags:
   - context-assembly
   - parent:EPIC-16
   - source-attribution
   - substrate-grounded
+  comments:
+  - id: 019e5bba-572d-74e3-b500-af1da85c38e3
+    author: joe
+    content: 'Marked Completed by advisor cleanup post-EPIC-16 PR-1 merge (master commit 1a5b1f9, GH PR #1). The substrate-grounded-context-assembly intent is satisfied by: (a) the system prompt block in src/server/backends/anthropic.rs that requires SPEC-ID + path:line citation for every factual claim, (b) the find_traces tool for SPEC-ID → file:line resolution, (c) MCP-grounded aida_* tools for live substrate queries. Per the substrate-cleanup proposal on EPIC-16.'
+    created_at: 2026-05-24T20:43:19.213422932Z
+    modified_at: 2026-05-24T20:43:19.213422932Z
 - id: 019e242d-00ed-7070-9dc2-a5531c525c65
   spec_id: STORY-9
   agreed_id: STORY-9
@@ -704,18 +793,24 @@ requirements:
   agreed_id: STORY-19
   title: MCP-first integration contract; CLI + file fallback
   description: ''
-  status: Approved
+  status: Completed
   priority: Medium
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:28.756084583Z
-  modified_at: 2026-05-24T07:07:28.756084583Z
+  modified_at: 2026-05-24T20:43:25.426031866Z
   req_type: Story
   tags:
   - integration-contract
   - mcp
   - parent:EPIC-16
   - plug-in
+  comments:
+  - id: 019e5bba-6f72-7120-8342-9c5ccce7b2aa
+    author: joe
+    content: 'Marked Completed by advisor cleanup post-EPIC-16 PR-1 merge (master commit 1a5b1f9, GH PR #1). The MCP-first integration contract is implemented in src/server/mcp/ (custom JSON-RPC stdio client, ~200 LOC, no rmcp dep) with CLI fallback wired through try_mcp''s Unavailable/Closed/Timeout markers in src/server/tools/aida.rs. Failure model documented in src/server/mcp/client.rs:18-28. Per the substrate-cleanup proposal on EPIC-16.'
+    created_at: 2026-05-24T20:43:25.426031866Z
+    modified_at: 2026-05-24T20:43:25.426031866Z
 - id: 019e242d-1482-7941-92fb-f9dc327219b5
   spec_id: STORY-11
   agreed_id: STORY-11
@@ -741,58 +836,189 @@ requirements:
   agreed_id: STORY-22
   title: 'aida-chat feedback loop 2: chat → new task/bug (pre-filled aida add)'
   description: When the chat surfaces friction with no existing SPEC, offer 'file as TASK' or 'file as BUG' with title + description + suggested parent. One-click executes 'aida add' with the prefilled args. Spec ID returned and shown inline. trace:EPIC-16
-  status: Approved
+  status: Completed
   priority: High
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T15:39:08.149752821Z
-  modified_at: 2026-05-24T15:39:08.149752821Z
+  modified_at: 2026-05-24T20:42:42.569143962Z
   req_type: Story
   tags:
   - batch:aida-chat-feedback-loops
   - epic:EPIC-16
+  comments:
+  - id: 019e5b85-dbe3-72a3-8bdc-0ed8978aea96
+    author: joe
+    content: 'Implementation note: STORY-22 backend added aida_add tool and POST /api/sessions/:id/spec endpoint using shared SpecRequest/SpecResponse in crate::messages. Live MCP add_requirement was smoke-tested first: tools/list advertises add_requirement(type,title,description,status), but the call returned success with SPEC-007 while aida search found no persisted requirement. Product write path is CLI-only via aida add until that upstream BUG-377-class behavior is fixed. Verification: cargo test --features ssr --lib passed 18/18; cargo run --example mcp_smoke --features ssr passed and documents the MCP persistence gap; HTTP smoke verified bad type 400 and valid create 200 with parsed BUG-28, then deleted the smoke spec.'
+    created_at: 2026-05-24T19:45:59.779341631Z
+    modified_at: 2026-05-24T19:45:59.779341631Z
+  - id: 019e5b87-02cc-7061-8734-a78bf779782f
+    author: joe
+    content: 'Codex opened PR #4 for STORY-22 backend: https://github.com/joemooney/aida-chat/pull/4 (base codex/epic-16-mcp-foundation until PR #1 lands). Commit 0e893a0. Verification captured in PR body; temporary smoke specs were deleted.'
+    created_at: 2026-05-24T19:47:15.276465331Z
+    modified_at: 2026-05-24T19:47:15.276465331Z
+  - id: 019e5b8a-e598-7733-a31e-a410c164bb52
+    author: joe
+    content: |-
+      Advisor verdict on PR #4 (STORY-22 backend, commit 0e893a0):
+
+      **Status correction:** Codex closed lease + marked Done, but the spec body specifies the UI affordance ('One-click executes aida add with the prefilled args. Spec ID returned and shown inline.') — backend alone isn't the loop. Reset to In Progress; will move to Done after frontend lands and both PRs merge. Same pattern as STORY-21 — flag for future dispatch shape.
+
+      **PR #4 — cleared.** Verified:
+      - 18/18 tests pass (run on 0e893a0 directly)
+      - HTTP smoke verified end-to-end: bad type → 400, valid → BUG-28 returned, aida show confirmed, cleanup confirmed
+      - Substrate-discipline: CLI-only after Codex's MCP smoke confirmed add_requirement has same BUG-377 silent-data-loss class as add_comment (filed as scope-expansion comment on BUG-377)
+      - Anthropic backend tool list + system prompt updated
+
+      **Two deviations from my brief (both fine, surfacing for Claude's coordination):**
+
+      1. **SpecRequest field naming:** my brief specified `pub r#type: String` (Rust raw identifier). Codex used `#[serde(rename = \"type\")] pub req_type: String` — wire format identical (\"type\"), field-name in Rust is `req_type`. Claude's frontend constructing SpecRequest must use `req_type:` not `r#type:`.
+
+      2. **description widened to Option<String>** with #[serde(default)]. More lenient than my brief; backward-compatible. Claude can pass None when description is empty.
+
+      Both decisions are reasonable judgment calls by Codex; my brief was wrong to over-specify field-level shape.
+
+      **PR #4 base ref:** `codex/epic-16-mcp-foundation` (PR #1's branch), NOT codex/story-21-comment-backend. So PR #2 and PR #4 are two parallel stacks off PR #1 — both become independently mergeable to master once PR #1 lands. Clean shape.
+
+      **Claude coordination note** (forwardable): SpecRequest/SpecResponse already exist in crate::messages on PR #4's branch. Use those exact definitions — don't redefine. Field is `req_type` not `r#type`; description is Option<String>. Stub the /api/sessions/:id/spec endpoint in your branch per STORY-21 pattern; drop at integration.
+
+      — aida-chat advisor
+    created_at: 2026-05-24T19:51:29.944075091Z
+    modified_at: 2026-05-24T19:51:29.944075091Z
+  - id: 019e5b8e-2785-7d00-b580-9aab7bc87cee
+    author: joe
+    content: |-
+      Advisor verdict on Claude's STORY-22 frontend (worktree /home/joe/ai/aida-chat-story-22, branch claude/story-22-frontend, stacked on claude/story-21-frontend@b8f3fde):
+
+      **Cleared to commit + open PR.** Verified:
+      - 33/33 tests pass (23 baseline + 5 title-heuristic + 5 serde-contract)
+      - Builds green: ssr + hydrate (wasm) + cargo leptos
+      - Test coverage strong: `spec_request_serializes_type_field_unprefixed` explicitly asserts the wire format is "type" not "r#type" — critical contract guard
+      - Stub markers prominent, contract isolated to crate::messages
+      - No premature abstraction across CommentCapture/SpecCapture — Claude correctly noted that's a STORY-23-data-point lever, not a STORY-22 lever
+      - Visual-quirk decision (two stacked .actions rows, 2px gap fix) is honoring the brief; the alternative (lift buttons to TurnView) IS the abstraction the brief postponed
+
+      **Branch topology:** stacked on claude/story-21-frontend (b8f3fde), justified by the requirement to render SpecCapture alongside STORY-21's CommentCapture. Standard stacked-PR shape; rebase when PR #3 lands.
+
+      **Integration question for whoever lands the merge:** Claude and Codex independently produced different Rust shapes for `SpecRequest` (wire format identical):
+
+      | | Codex (PR #4) | Claude |
+      |---|---|---|
+      | Field name | `pub req_type: String` + `#[serde(rename = \"type\")]` | `pub r#type: String` (no rename) |
+      | `description` | `Option<String>` w/ `#[serde(default)]` | `String` (required) |
+
+      **Recommendation: adopt Claude's shape.** Cleaner (no serde rename), more idiomatic (r#type is the standard keyword escape), and required description matches the actual UI flow (always populated from assistant message body). Integration cost: rename `req_type` → `r#type` + drop Option-handling in Codex's executor. Tiny mechanical change.
+
+      Operator can override; surfacing because both implementers wrote with care and the integration person shouldn't pick randomly.
+
+      — aida-chat advisor
+    created_at: 2026-05-24T19:55:03.429329094Z
+    modified_at: 2026-05-24T19:55:03.429329094Z
+  - id: 019e5b8f-438e-7b10-9e02-fd15ed951ed8
+    author: joe
+    content: Commit d5f679a references this requirement
+    created_at: 2026-05-24T19:56:16.142335432Z
+    modified_at: 2026-05-24T19:56:16.142335432Z
 - id: 019e5aa4-02e6-7771-9641-4e78b53abc9d
   spec_id: STORY-23
   agreed_id: STORY-23
   title: 'aida-chat feedback loop 3: chat → memory write'
   description: When the chat surfaces a pattern, principle, or correction worth preserving across sessions, offer 'save as memory'. Pre-fill memory frontmatter and body from the conversation. Write to ~/.claude/projects/<slug>/memory/, add MEMORY.md index entry, show path + link. trace:EPIC-16
-  status: Approved
+  status: InProgress
   priority: High
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T15:39:18.630304019Z
-  modified_at: 2026-05-24T15:39:18.630304019Z
+  modified_at: 2026-05-25T01:51:14.644763988Z
   req_type: Story
   tags:
   - batch:aida-chat-feedback-loops
   - epic:EPIC-16
+  comments:
+  - id: 019e5c06-ad29-71a1-8cf1-13ae896a1929
+    author: joe
+    content: 'Codex backend implementation note: added write_memory tool in src/server/tools/memory.rs plus POST /api/sessions/:id/memory endpoint and shared MemoryRequest/MemoryResponse types. Writes are confined to ~/.claude/projects/<slug>/memory/ where slug is derived from canonical cfg.repo_root; name validation rejects path escapes and .md suffix; duplicate memory files are rejected; MEMORY.md index is atomically updated with replace-not-duplicate semantics. Verification: cargo test --features ssr --lib passed 44/44. Manual curl smoke wrote story-23-smoke-* to /home/joe/.claude/projects/-home-joe-ai-aida-chat/memory/, verified frontmatter + MEMORY.md line, verified duplicate write returned 400, then removed the test file and index line. STORY-23 intentionally remains In Progress until frontend lands per brief.'
+    created_at: 2026-05-24T22:06:41.961471447Z
+    modified_at: 2026-05-24T22:06:41.961471447Z
+  - id: 019e5c07-c98a-7f92-b0b9-2dc7068b9189
+    author: joe
+    content: 'Codex opened backend PR #6: https://github.com/joemooney/aida-chat/pull/6 at commit 5b2e1fa ([AI:codex] feat(aida): add chat → memory write tool + endpoint (STORY-23)). STORY-23 remains In Progress pending frontend integration.'
+    created_at: 2026-05-24T22:07:54.762763525Z
+    modified_at: 2026-05-24T22:07:54.762763525Z
+  - id: 019e5c0d-f0b1-7331-bb14-b5705c9eea3c
+    author: joe
+    content: Commit 5b2e1fa references this requirement
+    created_at: 2026-05-24T22:14:38.001212402Z
+    modified_at: 2026-05-24T22:14:38.001212402Z
+  - id: 019e5cd4-40d4-7940-9da3-d52976fab712
+    author: joe
+    content: |-
+      Advisor verdict on both halves of STORY-23 — backend (PR #6, commit 5b2e1fa) and frontend (PR #7, commit 1016588).
+
+      **Both cleared to merge.** Verified independently on detached worktrees:
+
+      **PR #6 (Codex, backend):**
+      - 44/44 tests pass on a clean clone at 5b2e1fa.
+      - Security envelope is *tight*. The confinement test specifically: (a) creates a symlink in `memory_dir` pointing to a path OUTSIDE memory_dir, then (b) verifies `resolve_within_memory_dir` rejects it. Plus `filename_validators` covers `foo/bar`, `..`, `.foo`, `foo.md`, empty, > 80 chars. That's the exact attack vector for the first-tool-writing-outside-repo-confinement decision.
+      - Atomic-write uses temp-in-same-dir + rename + cleanup-on-error. Correct atomicity guarantee on POSIX.
+      - MEMORY.md update is idempotent (replace-not-duplicate), verified by `memory_index_replaces_not_duplicates` test.
+      - Tool registered in `tools/mod.rs` + `backends/anthropic.rs` tool list + system prompt hint as specified.
+      - Manual smoke verified end-to-end with cleanup.
+      - Scope tight — no aida.rs changes, no claude-cli touch.
+
+      **PR #7 (Claude, frontend):**
+      - 45/45 tests pass; ssr + hydrate + cargo leptos all green per report.
+      - Stub markers prominent, will drop at integration cleanly (same pattern as STORY-21/22).
+      - Field validation mirrors server-side (name slug regex, type enum, description cap, body non-empty).
+      - Factoring decision: kept three parallel components (CommentCapture + SpecCapture + new MemoryCapture). Rationale block at src/app.rs:438 in the diff explains the revisit triggers. Defensible read — the three components share UX shape but differ in field config + result formatting. The HTTP helpers (post_comment/post_spec/post_memory) ARE more amenable to a `post_typed<Req,Resp>` factoring, which Claude flagged for STORY-24+ if a fourth instance arrives. Good restraint.
+
+      **Contract compatibility — byte-identical this time.** Both PRs independently produced the same `MemoryRequest`/`MemoryResponse` struct with identical field order, identical serde attributes, identical r#type convention. The only differences are doc-comment wording. Integration is mechanically trivial:
+      - messages.rs: choose either MemoryRequest/MemoryResponse definition (they're equivalent); keep Claude's separate `memory_contract_tests` mod (5 tests, cleaner separation), drop Codex's inline test addition inside `spec_contract_tests` (avoids module bloat).
+      - api.rs: drop Claude's stub route + add_memory_stub fn; keep Codex's real `add_memory` handler.
+      - No other files touch the same content.
+
+      **Suggested merge order when operator returns:**
+      1. PR #6 first (lands the real handler + tool + types)
+      2. PR #7 second (rebases on master; resolve the messages.rs duplication by keeping Claude's test mod + Codex's struct definitions; drop the stub)
+
+      After both land: STORY-23 → Completed.
+
+      — aida-chat advisor
+    created_at: 2026-05-25T01:51:14.644763988Z
+    modified_at: 2026-05-25T01:51:14.644763988Z
 - id: 019e58cf-682f-78a2-9e7d-4bde13de7be7
   spec_id: STORY-18
   agreed_id: STORY-18
   title: Five virtuous-loop capture verbs (chat → comment/task/memory/plan/trace-finding)
   description: ''
-  status: Approved
+  status: Completed
   priority: High
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T07:07:28.175249307Z
-  modified_at: 2026-05-24T07:07:28.175249307Z
+  modified_at: 2026-05-24T20:43:22.286760551Z
   req_type: Story
   tags:
   - capture-verbs
   - feedback-loop
   - parent:EPIC-16
+  comments:
+  - id: 019e5bba-632e-7562-b3f5-8d008dc3af90
+    author: joe
+    content: 'Marked Completed by advisor cleanup. The five virtuous-loop capture verbs intent is satisfied by STORY-21..STORY-25, which break out each verb as a concrete story with acceptance criteria. STORY-21 and STORY-22 already shipped (master commits 354aa3f + e1e1c3f + daec131 + 5d33b36, GH PRs #2/#3/#4/#5). STORY-23/24/25 remain on the queue. Per the substrate-cleanup proposal on EPIC-16.'
+    created_at: 2026-05-24T20:43:22.286760551Z
+    modified_at: 2026-05-24T20:43:22.286760551Z
 - id: 019e5aa3-ad0b-7760-a9ec-ef7b61424e6a
   spec_id: STORY-21
   agreed_id: STORY-21
   title: 'aida-chat feedback loop 1: chat → spec comment (aida comment add)'
   description: When the chat surfaces discussion of an existing SPEC (model references its ID), offer a one-click action to capture the discussion as 'aida comment add <ID> <summary>'. Pre-fill the summary from the relevant message turns. After execution, show the new comment inline so the user sees the substrate growing. trace:EPIC-16
-  status: InProgress
+  status: Completed
   priority: High
   owner: ''
   feature: 1-Uncategorized
   created_at: 2026-05-24T15:38:56.651524973Z
-  modified_at: 2026-05-24T19:11:31.963794908Z
+  modified_at: 2026-05-25T01:54:41.705727348Z
   req_type: Story
   tags:
   - batch:aida-chat-feedback-loops
@@ -845,6 +1071,11 @@ requirements:
       — aida-chat advisor
     created_at: 2026-05-24T19:11:31.963794908Z
     modified_at: 2026-05-24T19:11:31.963794908Z
+  - id: 019e5cd7-69a9-7253-be7d-24f4342f8870
+    author: mcp_smoke temporary add_comment check 3001921
+    content: mcp
+    created_at: 2026-05-25T01:54:41.705696949Z
+    modified_at: 2026-05-25T01:54:41.705696949Z
 - id: 019e242d-28be-7ae0-9718-eb506e5a9610
   spec_id: STORY-13
   agreed_id: STORY-13
@@ -1276,17 +1507,6 @@ requirements:
   - rel_type: Parent
     target_id: 019e2405-8e98-7102-93a0-aead8d7127e0
     created_at: 2026-05-14T01:06:44.504329262Z
-- id: 019e5b82-ea01-72f2-8b69-f3676748b77a
-  spec_id: SPEC-007
-  title: mcp_smoke temporary add_requirement 2746404
-  description: temporary MCP add_requirement smoke; delete me
-  status: Draft
-  priority: Medium
-  owner: ''
-  feature: Uncategorized
-  created_at: 2026-05-24T19:42:46.785717050Z
-  modified_at: 2026-05-24T19:42:46.785717050Z
-  req_type: Task
 id_config:
   format: SingleLevel
   numbering: Global
