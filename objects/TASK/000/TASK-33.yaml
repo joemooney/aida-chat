@@ -1,0 +1,12 @@
+id: 019e683a-b0e2-75d2-ba5f-51edc3578775
+spec_id: TASK-33
+agreed_id: TASK-33
+title: Add aida-chat runtime health/debug endpoint
+description: 'Expose operator-visible runtime state: backend, repo_root, MCP availability/last error, canned-answer count, query-log DB path, active session count, and claude-cli live process count where applicable. This is intended to speed demo/debug diagnosis. Reference docs/aida/2026-05-26-codex-system-improvement-audit.md.'
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-27T06:58:57.378246104Z
+modified_at: 2026-05-27T06:58:57.378246104Z
+req_type: Task
