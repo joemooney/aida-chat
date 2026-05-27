@@ -1,0 +1,12 @@
+id: 019e683a-89d4-70c1-82ea-70eafffc0da7
+spec_id: TASK-30
+agreed_id: TASK-30
+title: Add CI baseline for aida-chat verification gates
+description: 'Post-merge audit found clippy warnings that functional tests did not catch. Add required CI checks for: cargo test --features ssr --lib; cargo build --features hydrate --lib; cargo leptos build; cargo clippy --features ssr --lib -- -D warnings. Reference docs/aida/2026-05-26-codex-system-improvement-audit.md.'
+status: Draft
+priority: Medium
+owner: ''
+feature: Uncategorized
+created_at: 2026-05-27T06:58:47.380088905Z
+modified_at: 2026-05-27T06:58:47.380088905Z
+req_type: Task
